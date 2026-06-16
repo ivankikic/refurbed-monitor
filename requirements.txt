@@ -1,0 +1,5 @@
+# Runtime: just an HTTP client. No browser, no heavy parser.
+requests>=2.31
+
+# Dev/test only (optional — tests also run via plain `python3 tests/test_*.py`):
+# pytest>=8.0

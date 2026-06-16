@@ -1,0 +1,16 @@
+# secrets & local logs
+.env
+monitor.log
+
+# NOTE: seen.json is intentionally TRACKED (not ignored). The GitHub Actions
+# cron commits it back each run so dedup state survives between runs. If you only
+# ever run locally and don't want it in git, add `seen.json` here.
+
+# runtime artifacts
+cache/
+__pycache__/
+*.pyc
+.venv/
+
+# raw investigation scratch (evidence; regenerable, large)
+_investigation/
