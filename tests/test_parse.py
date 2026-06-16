@@ -123,14 +123,23 @@ def test_product_seeds():
     assert any(abs((s.price or 0) - 999.0) < 0.01 for s in seeds)
 
 
-def test_neighbors_present_and_skip_keyboard():
+def test_neighbors_follow_only_allowed_keyboards():
     html = _read("m4air_308042_16-512.html")
-    nbrs = parse.crawl_neighbors(html, config.CRAWL_AXES, config.BASE)
+    nbrs = parse.crawl_neighbors(html, config.CRAWL_AXES, config.BASE,
+                                 keyboard_filter=["US", "HR"])
     assert len(nbrs) >= 4
     # 24 GB RAM neighbour (308185) must be discoverable
     assert any("308185aa" in u for u in nbrs)
-    # keyboard-only variants (e.g. the SE/DK 424xxx) must NOT be followed
-    assert not any("/424609/" in u or "/424620/" in u for u in nbrs)
+    # non-US/HR keyboard variants (SE 424609, DK 424620, NL 424621) must NOT be
+    # followed; the page's own keyboard is US (selected) so no kb neighbour added
+    assert not any(x in u for u in nbrs
+                   for x in ("/424609/", "/424620/", "/424621/", "/308068aa/"))  # DE
+
+
+def test_neighbors_unfiltered_follows_all_keyboards():
+    html = _read("m4air_308042_16-512.html")
+    nbrs = parse.crawl_neighbors(html, config.CRAWL_AXES, config.BASE)  # no filter
+    assert any("/424620/" in u for u in nbrs)  # DK now followed when unfiltered
 
 
 def _run_plain():

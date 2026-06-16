@@ -280,16 +280,39 @@ def selected_battery(html: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def crawl_neighbors(html: str, axes: Iterable[str], base: str) -> list[str]:
-    """Absolute variant URLs reachable by changing one of `axes` from this page."""
+def _kb_set(keyboard_filter) -> set:
+    """Normalise a keyboard filter (str | list | None) to a set of upper codes."""
+    if not keyboard_filter:
+        return set()
+    if isinstance(keyboard_filter, str):
+        keyboard_filter = [keyboard_filter]
+    return {k.upper() for k in keyboard_filter}
+
+
+def crawl_neighbors(html: str, axes: Iterable[str], base: str,
+                    keyboard_filter=None) -> list[str]:
+    """Absolute variant URLs reachable by changing one of `axes` from this page.
+
+    For the keyboard axis we only follow options whose layout is in
+    `keyboard_filter` (e.g. {"US","HR"}) — that biases the whole BFS toward the
+    layouts the owner accepts, instead of exploding the matrix across every
+    locale. Pass keyboard_filter=None to follow all keyboard options.
+    """
     wanted = set(axes)
+    kb_allowed = _kb_set(keyboard_filter)
     urls: list[str] = []
     for label, inner in _iter_select_blocks(html):
         if label not in wanted:
             continue
-        for _opt_label, val, sel in _options(inner):
+        is_keyboard = _AXIS_NAME_RE.get(label) == "keyboard"
+        for opt_label, val, sel in _options(inner):
             if sel or not val:
                 continue
+            if is_keyboard and kb_allowed:
+                # option label looks like "US (američki engleski)" -> first token
+                first = opt_label.split()[0].upper() if opt_label else ""
+                if first not in kb_allowed:
+                    continue
             urls.append(val if val.startswith("http") else base + val)
     # de-dup, preserve order
     seen: set[str] = set()
@@ -301,7 +324,8 @@ def crawl_neighbors(html: str, axes: Iterable[str], base: str) -> list[str]:
     return out
 
 
-def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str]) -> VariantPage:
+def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str],
+                       keyboard_filter: Optional[str] = None) -> VariantPage:
     """Parse a fetched variant (or product) page into a VariantPage."""
     vp = VariantPage()
     m = _GA_DETAIL_RE.search(html)
@@ -317,7 +341,7 @@ def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str]) -> Varia
     minst = re.search(r'data-instance-id="(\d+)"', html)
     if minst:
         vp.instance_id = minst.group(1)
-    vp.neighbors = crawl_neighbors(html, crawl_axes, base)
+    vp.neighbors = crawl_neighbors(html, crawl_axes, base, keyboard_filter)
     return vp
 
 

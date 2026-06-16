@@ -51,11 +51,86 @@ class Offer:
     def is_silicon(self) -> bool:
         return self.chip is not None
 
+    @property
+    def discount_pct(self) -> float:
+        """Discount vs refurbed's own list price (the strike-through number)."""
+        if self.list_price and self.list_price > self.price:
+            return round((self.list_price - self.price) / self.list_price * 100, 1)
+        return 0.0
+
 
 def silicon_only(offers: list[Offer]) -> list[Offer]:
     if not config.REQUIRE_SILICON:
         return offers
     return [o for o in offers if o.is_silicon]
+
+
+def keyboard_filtered(offers: list[Offer]) -> list[Offer]:
+    """Keep only the layouts the owner accepts (config.KEYBOARD_FILTER).
+
+    KEYBOARD_FILTER may be a string ("US") or a list (["US","HR"]). Cheapest of
+    the allowed layouts wins naturally downstream (cheapest_path / top_picks).
+    """
+    kb = getattr(config, "KEYBOARD_FILTER", None)
+    if not kb:
+        return offers
+    allowed = {kb.upper()} if isinstance(kb, str) else {k.upper() for k in kb}
+    return [o for o in offers if (o.keyboard or "").upper() in allowed]
+
+
+# Newer Apple-Silicon generation = nicer (small ranking nudge only).
+_CHIP_GEN = {"M1": 1, "M2": 2, "M3": 3, "M4": 4}
+
+
+def value_score(o: Offer) -> float:
+    """Deterministic 'how good a buy is this' score (fallback ranking + AI seed).
+
+    Driven mostly by what the owner cares about: big % off and a low absolute
+    price, with small bonuses for spec / condition / newer chip.
+    """
+    score = o.discount_pct                                   # the bagatela signal
+    if o.price <= config.CEILING:                            # cheaper vs budget
+        score += (config.CEILING - o.price) / config.CEILING * 45
+    score += (o.ram - config.GOOD_RAM) * 0.4                 # extra RAM
+    # storage beyond ~512 GB barely matters to this buyer -> cap the bonus
+    score += max(0, min(o.storage, 512) - config.GOOD_STORAGE) / 256 * 3
+    score += max(o.cond_rank, 0) * 1.5                       # better condition
+    score += _CHIP_GEN.get(o.chip or "", 0) * 2              # newer chip (mild)
+    if o.battery == "new":
+        score += 2
+    return round(score, 2)
+
+
+def _config_key(o: Offer) -> tuple:
+    return (o.product, o.ram, o.storage, o.color, o.condition, o.battery, o.keyboard)
+
+
+def collapse_by_config(offers: list[Offer]) -> list[Offer]:
+    """Keep only the cheapest available listing per identical config (drop
+    duplicate sellers of the exact same machine)."""
+    best: dict = {}
+    for o in offers:
+        k = _config_key(o)
+        if k not in best or o.price < best[k].price:
+            best[k] = o
+    return list(best.values())
+
+
+def top_picks(offers: list[Offer], n: int | None = None) -> list[Offer]:
+    """Best buyable offers, ranked. Candidates = available, US, silicon, within
+    budget and >= good-enough spec, PLUS any in-budget 'dream discount' steal."""
+    dream = getattr(config, "DREAM_DISCOUNT_PCT", 100)
+    cands = [
+        o for o in offers
+        if o.available and o.price <= config.CEILING
+        and (
+            (o.ram >= config.GOOD_RAM and o.storage >= config.GOOD_STORAGE)
+            or o.discount_pct >= dream
+        )
+    ]
+    cands = collapse_by_config(cands)        # one listing per identical machine
+    cands.sort(key=value_score, reverse=True)
+    return cands[: (n or config.TOP_PICKS)]
 
 
 # --------------------------------------------------------------------------- #
@@ -69,7 +144,7 @@ def absolute_deals(offers: list[Offer]) -> list[Offer]:
         and o.ram >= config.GOOD_RAM
         and o.storage >= config.GOOD_STORAGE
     ]
-    return sorted(ok, key=lambda o: o.price)
+    return sorted(collapse_by_config(ok), key=lambda o: o.price)
 
 
 # --------------------------------------------------------------------------- #
@@ -208,14 +283,16 @@ class Report:
     deals: list[Offer]
     paths: dict                       # (ram,storage) -> Offer | None
     anomalies: list[Anomaly]
+    picks: list[Offer] = field(default_factory=list)   # ranked top buys
     summaries: list[ProductSummary] = field(default_factory=list)
 
 
 def build_report(offers: list[Offer]) -> Report:
-    offers = silicon_only(offers)
+    offers = keyboard_filtered(silicon_only(offers))
     deals = absolute_deals(offers)
     paths = {spec: cheapest_path(offers, *spec) for spec in config.TARGET_SPECS}
     anomalies = marginal_anomalies(offers)
+    picks = top_picks(offers)
 
     by_product: dict = {}
     for o in offers:
@@ -239,4 +316,4 @@ def build_report(offers: list[Offer]) -> Report:
             anomaly_count=anom_by_product.get(product, 0),
         ))
 
-    return Report(offers, deals, paths, anomalies, summaries)
+    return Report(offers, deals, paths, anomalies, picks, summaries)

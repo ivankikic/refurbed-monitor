@@ -1,17 +1,16 @@
-name: refurbed monitor (full)
+name: refurbed monitor (light)
 
-# Deep crawl — the complete matrix + anomalies — a few times a day.
-# GitHub cron is UTC. 6/11/16/20 UTC ≈ 08/13/18/22 Zagreb (summer).
+# Fast, polite scan of just the cheapest configs — runs often to catch steals
+# that vanish in minutes. ~8 fetches/product, ~1 min/run.
 on:
   schedule:
-    - cron: "0 6,11,16,20 * * *"
+    - cron: "*/20 * * * *"     # every 20 minutes (UTC). Dial back if you like.
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
-# Shared across BOTH workflows so the full + light runs never overlap and never
-# fight over seen.json.
+# Same group as the full workflow → they serialize, no seen.json races.
 concurrency:
   group: refurbed-monitor
   cancel-in-progress: false
@@ -19,7 +18,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,7 +27,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Run monitor (full crawl → AI rank → email new finds)
+      - name: Run monitor (light scan → AI rank → email new finds)
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
@@ -36,7 +35,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python3 monitor.py --mode full
+        run: python3 monitor.py --mode light
 
       - name: Persist dedup state (seen.json)
         if: always()
@@ -47,7 +46,7 @@ jobs:
           git config user.name  "refurbed-monitor[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add seen.json
-          git commit -m "state: update seen.json (full) [skip ci]"
+          git commit -m "state: update seen.json (light) [skip ci]"
           for i in 1 2 3; do
             git pull --rebase origin main && git push && break || sleep 4
           done

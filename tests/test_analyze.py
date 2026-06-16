@@ -107,6 +107,29 @@ def test_cheapest_path_across_colours():
 
 
 # --------------------------------------------------------------------------- #
+def test_keyboard_filter_keeps_us_and_hr_only():
+    offers = [
+        mk(kb="US", price=700, vid="us"),
+        mk(kb="HR", price=690, vid="hr"),
+        mk(kb="DE", price=650, vid="de"),   # cheaper but wrong layout -> dropped
+        mk(kb="UK", price=600, vid="uk"),   # dropped
+    ]
+    rep = analyze.build_report(offers)
+    kbs = {o.keyboard for o in rep.offers}
+    assert kbs == {"US", "HR"}
+    # cheapest of the ALLOWED layouts wins the path (HR 690, not DE 650)
+    assert rep.paths[(16, 256)].variant_id == "hr"
+
+
+def test_discount_pct_and_steal_tier():
+    o = mk(price=635.0, vid="steal")
+    o.list_price = 1729.0
+    assert round(o.discount_pct) == 63
+    # a 63%-off in-budget machine should be the #1 pick
+    rep = analyze.build_report([o, mk(price=900, vid="meh")])
+    assert rep.picks[0].variant_id == "steal"
+
+
 def test_intel_excluded_even_if_cheap():
     offers = [
         mk(ram=32, storage=512, chip=None, price=253.0, model="MBP 13 Intel", vid="intel"),

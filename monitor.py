@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-from refurbed import analyze, config, crawl, notify
+from refurbed import ai, analyze, config, crawl, notify
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -31,8 +31,13 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="ignore the on-disk HTML cache (always hit the network)")
     p.add_argument("--products", default="",
                    help="comma-separated slugs to crawl (default: WATCHLIST)")
+    p.add_argument("--mode", choices=["full", "light"], default="full",
+                   help="full = deep crawl (anomalies); light = fast small crawl "
+                        "to catch fast-vanishing steals")
     p.add_argument("--max-fetches", type=int, default=None,
-                   help="override MAX_FETCHES_PER_PRODUCT")
+                   help="override the per-product fetch cap")
+    p.add_argument("--no-ai", action="store_true",
+                   help="skip the Gemini ranking (use deterministic ranking)")
     p.add_argument("--offers-json", default="",
                    help="dump raw collected offers to this JSON file")
     p.add_argument("--quiet", action="store_true", help="less crawl chatter")
@@ -41,15 +46,20 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.mode == "light":
+        config.MAX_FETCHES_PER_PRODUCT = config.LIGHT_MAX_FETCHES
     if args.max_fetches is not None:
         config.MAX_FETCHES_PER_PRODUCT = args.max_fetches
 
     slugs = [s.strip() for s in args.products.split(",") if s.strip()] or config.WATCHLIST
     verbose = not args.quiet
 
-    print(f"refurbed monitor — {notify.now_iso()}")
+    kb = config.KEYBOARD_FILTER or "any"
+    ai_on = (not args.no_ai) and ai.available()
+    print(f"refurbed monitor — {notify.now_iso()} [{args.mode}]")
     print(f"products: {len(slugs)} | ceiling {config.CEILING:.0f}€ | "
-          f"silicon-only={config.REQUIRE_SILICON} | max-fetches={config.MAX_FETCHES_PER_PRODUCT}")
+          f"kb={kb} | silicon-only={config.REQUIRE_SILICON} | "
+          f"cap={config.MAX_FETCHES_PER_PRODUCT} | AI={'on' if ai_on else 'off'}")
 
     # 1. crawl ------------------------------------------------------------- #
     offers = crawl.crawl_all(slugs, use_cache=not args.no_cache, verbose=verbose)
@@ -61,7 +71,8 @@ def main(argv=None) -> int:
     report = analyze.build_report(offers)
     excluded = len(offers) - len(report.offers)
     if excluded:
-        print(f"Excluded {excluded} non-Apple-Silicon (Intel) configs.")
+        kb = config.KEYBOARD_FILTER or "any"
+        print(f"Excluded {excluded} configs (Intel or keyboard not in {kb}).")
 
     if args.offers_json:
         with open(args.offers_json, "w", encoding="utf-8") as fh:
@@ -74,9 +85,12 @@ def main(argv=None) -> int:
     sigs = notify.current_signatures(report)
     new_sigs = {s for s in sigs if s not in seen}
 
+    # 3b. AI ranking + email composition (optional; falls back gracefully) ---- #
+    ai_result = None if args.no_ai else ai.rank(report)
+
     ts = notify.now_iso()
-    body = notify.render_text(report, new_sigs, ts)
-    subject = notify.subject_line(report, new_sigs)
+    body = notify.render_text(report, new_sigs, ts, ai_result)
+    subject = notify.subject_line(report, new_sigs, ai_result)
 
     print()
     print(body)

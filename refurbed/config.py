@@ -9,9 +9,19 @@ from __future__ import annotations
 # --------------------------------------------------------------------------- #
 # What counts as a "good deal"  (brief §1, §8)
 # --------------------------------------------------------------------------- #
-CEILING = 1150.0          # absolute-deal price ceiling, EUR
+CEILING = 1100.0          # absolute-deal price ceiling, EUR (owner: max 1100)
 GOOD_RAM = 16             # minimum "good enough" RAM (GB)
 GOOD_STORAGE = 256        # minimum "good enough" storage (GB)
+
+# Keyboard layouts the owner will accept — US or HR, whichever ends up cheaper.
+# Offers with any other layout are filtered out (set to None/[] to disable).
+# The crawler navigates the keyboard dropdown toward THESE layouts so it
+# discovers the right variants; cheapest-of-the-allowed then wins downstream.
+KEYBOARD_FILTER = ["US", "HR"]
+
+# A discount this big (vs refurbed's own list price) is a "steal" worth flagging
+# loudly regardless of absolute price — e.g. the M4 Air at 1000€ vs ~1730 list.
+DREAM_DISCOUNT_PCT = 40.0
 
 # Marginal-anomaly caps: a one-axis upgrade costing <= cap is "near free" gold.
 MARGINAL_RAM_MAX = 40.0       # e.g. 16->24 GB for <= 40 EUR
@@ -31,9 +41,12 @@ REQUIRE_SILICON = True
 BASE = "https://www.refurbed.hr"
 
 WATCHLIST = [
-    "apple-macbook-air-m4-2025",
-    "apple-macbook-air-m2-2022",
+    # Owner's sweet spot: M1/M2/M3 Air, 16GB, 256/512GB, US kb, <= 1100 €.
     "apple-macbook-air-m1-2020",
+    "apple-macbook-air-m2-2022",
+    "apple-macbook-air-m3-2024",
+    "apple-macbook-air-m4-2025",
+    # Pros kept for the occasional steal (a 32GB Pro under budget, big % off):
     "apple-macbook-pro-2021-m1-14",
     "apple-macbook-pro-2021-m1-16-2",
     "apple-macbook-pro-2024-m4-14",
@@ -56,10 +69,13 @@ CRAWL_AXES = [
     "Pohrana",            # storage
     "Boja",               # colour
     "Odaberite bateriju",  # battery
-    # "Raspored tipki",   # keyboard — intentionally skipped (see note above)
+    "Raspored tipki",     # keyboard — followed ONLY toward KEYBOARD_FILTER (US),
+                          #   so we reach US variants without exploring every locale
 ]
 
-MAX_FETCHES_PER_PRODUCT = 70   # hard cap on variant-page fetches per product/run
+MAX_FETCHES_PER_PRODUCT = 70   # hard cap per product/run in FULL mode
+LIGHT_MAX_FETCHES = 8          # smaller cap for frequent "catch-the-steal" runs
+                               #   (~8 cheapest configs/product, polite + quick)
 REQUEST_DELAY = 1.0            # seconds between requests (jitter added)
 REQUEST_JITTER = 0.6          # +/- random jitter on the delay
 REQUEST_TIMEOUT = 25          # per-request timeout, seconds
@@ -77,3 +93,17 @@ ANOMALY_REQUIRE_AVAILABLE = True
 
 # How many absolute deals to list in the email's "VRIJEDNO SPOMENA" section.
 TOP_ABSOLUTE_DEALS = 8
+
+# --------------------------------------------------------------------------- #
+# Ranking + AI  (the "don't make me read 54 lines" part)
+# --------------------------------------------------------------------------- #
+# How many ranked TOP picks to headline in the email.
+TOP_PICKS = 8
+
+# Gemini does the final ranking + writes the Croatian email. It's OPTIONAL: if
+# the key is missing or the API errors, we fall back to the deterministic
+# value-score ranking and a plain email — the monitor never breaks because of AI.
+GEMINI_MODEL = "gemini-2.5-flash"   # best price/quality for this; swap freely
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GEMINI_TIMEOUT = 40
+GEMINI_MAX_CANDIDATES = 40          # how many offers we hand the model to rank

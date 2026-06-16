@@ -181,7 +181,8 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
         if not page_html:
             continue
 
-        vp = parse.parse_variant_page(page_html, base, config.CRAWL_AXES)
+        vp = parse.parse_variant_page(page_html, base, config.CRAWL_AXES,
+                                      keyboard_filter=config.KEYBOARD_FILTER)
         if vp.found and vp.price is not None:
             var_id, offer_id = _ids_from_url(url)
             s = vp.spec

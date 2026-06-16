@@ -2,18 +2,20 @@
 
 Watches [refurbed.hr](https://www.refurbed.hr) for good **Apple-Silicon** MacBook
 deals and emails you when something worth buying appears. Pure-HTTP (no browser),
-runs from cron a few times a day.
+runs on a cloud cron.
 
-Each run reports three things:
+The email leads with **⭐ TOP PONUDE** — a short, ranked shortlist so you don't
+read 50 lines. Ranking is done by **Gemini AI** (with a deterministic fallback),
+factoring in the **% discount** vs list price (the "−63%" bagatela signal),
+absolute price vs budget, and spec. Below that it still reports:
 
-1. **Absolute deals** — cheapest *available* offers ≥16 GB / ≥256 GB under a
-   price ceiling.
-2. **Marginal anomalies** — near-free one-axis upgrades (the gold): e.g. *24 GB
-   for +5 €*, *512 GB for +30 €*, *new battery for +20 €*.
-3. **Cheapest-path-to-spec** — the cheapest way to reach 16/256, 16/512, 24/512
-   across all colours / conditions / sellers.
+1. **Absolute deals** — cheapest *available* offers ≥16 GB / ≥256 GB under the ceiling.
+2. **Marginal anomalies** — near-free one-axis upgrades: *24 GB for +5 €*,
+   *512 GB for +30 €*, *new battery for +20 €*.
+3. **Cheapest-path-to-spec** — cheapest way to reach 16/256, 16/512, 24/512.
 
-**Intel Macs are always excluded** (Apple Silicon only — hard rule).
+Tuned to the owner: **≤ 1100 €**, **≥16 GB / ≥256 GB**, **US or HR keyboard only**
+(whichever is cheaper), Apple Silicon only. **Intel Macs are always excluded.**
 
 See [`FINDINGS.md`](FINDINGS.md) for how the data source was reverse-engineered.
 
@@ -71,14 +73,19 @@ well). If no channel is configured, the run still prints the full report.
 ## Usage
 
 ```bash
-python3 monitor.py                 # full run: crawl → analyse → email if news
+python3 monitor.py                 # full run: crawl → AI-rank → email if news
+python3 monitor.py --mode light    # fast scan of cheapest configs (catch steals)
+python3 monitor.py --no-ai         # skip Gemini, use deterministic ranking
 python3 monitor.py --dry-run       # print the report, never send
 python3 monitor.py --no-state      # treat everything as new, don't touch seen.json
 python3 monitor.py --no-cache      # always hit the network (ignore page cache)
-python3 monitor.py --products apple-macbook-air-m4-2025   # one product
+python3 monitor.py --products apple-macbook-air-m1-2020   # one product
 python3 monitor.py --max-fetches 30                       # smaller/faster crawl
 python3 monitor.py --offers-json out.json                 # dump raw offers
 ```
+
+Set `GEMINI_API_KEY` (env or `.env`) to enable AI ranking; without it the
+monitor uses its built-in value-score ranking and still works.
 
 A run emails **only when there are new signals**. A second run with no market
 change sends nothing (it just logs) — see *Dedup* below.
@@ -87,18 +94,18 @@ change sends nothing (it just logs) — see *Dedup* below.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `CEILING` | 1150 | absolute-deal price ceiling (€) |
+| `CEILING` | 1100 | absolute-deal price ceiling (€) |
 | `GOOD_RAM` / `GOOD_STORAGE` | 16 / 256 | "good enough" spec |
-| `MARGINAL_RAM_MAX` | 40 | flag a RAM step costing ≤ this (€) |
-| `MARGINAL_STORAGE_MAX` | 60 | flag a storage step costing ≤ this |
-| `MARGINAL_BATTERY_MAX` | 35 | flag Optimalna→Nova costing ≤ this |
+| `KEYBOARD_FILTER` | `["US","HR"]` | accepted layouts (cheapest of these wins); `None` = any |
+| `DREAM_DISCOUNT_PCT` | 40 | flag as STEAL if ≥ this % off list |
+| `MARGINAL_RAM/STORAGE/BATTERY_MAX` | 40/60/35 | near-free upgrade caps (€) |
 | `TARGET_SPECS` | (16,256),(16,512),(24,512) | cheapest-path targets |
 | `REQUIRE_SILICON` | True | exclude Intel |
-| `WATCHLIST` | 6 models | product slugs to crawl |
-| `CRAWL_AXES` | cond,RAM,storage,colour,battery | axes to BFS (keyboard skipped) |
-| `MAX_FETCHES_PER_PRODUCT` | 70 | request cap per product per run |
+| `WATCHLIST` | 7 models | M1/M2/M3/M4 Air + 3 Pros |
+| `GEMINI_MODEL` | gemini-2.5-flash | AI ranker (best price/quality; swap freely) |
+| `TOP_PICKS` | 8 | how many ranked picks to headline |
+| `MAX_FETCHES_PER_PRODUCT` / `LIGHT_MAX_FETCHES` | 70 / 8 | full vs light crawl cap |
 | `REQUEST_DELAY` | 1.0 s | polite spacing between requests |
-| `CACHE_TTL` | 900 s | reuse cached pages younger than this |
 
 ---
 

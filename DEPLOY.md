@@ -32,7 +32,15 @@ the same deals every time).
    - `SMTP_USER` — your Gmail address
    - `SMTP_PASS` — Gmail **App Password** (16 chars)
    - `ALERT_TO` — where to send alerts
+   - `GEMINI_API_KEY` — for AI ranking ([aistudio.google.com/apikey](https://aistudio.google.com/apikey); optional — falls back to deterministic ranking)
    - *(optional)* `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
+> **Two workflows ship in `.github/workflows/`:** `monitor.yml` (full deep crawl,
+> 4×/day) and `monitor-light.yml` (fast cheap-config scan every 20 min to catch
+> steals). They share a concurrency group so they never clash over `seen.json`.
+> The frequent light scan needs unlimited Action minutes → make the repo
+> **public** (`gh repo edit --visibility public`); secrets stay encrypted and
+> your email is masked in logs, so nothing sensitive is exposed.
 
 3. **Test it now** — repo → **Actions** tab → "refurbed MacBook monitor" → **Run
    workflow**. First run emails everything found, then commits `seen.json`.
