@@ -315,8 +315,21 @@ def _kb_set(keyboard_filter) -> set:
     return {k.upper() for k in keyboard_filter}
 
 
+def _opt_gb(label: str) -> Optional[int]:
+    """Parse a RAM/storage option label to GB: '512 GB'->512, '1 TB'->1000,
+    '16.0 GB'->16."""
+    m = re.search(r"([\d.]+)\s*(TB|GB)", label, re.I)
+    if not m:
+        return None
+    val = float(m.group(1))
+    if m.group(2).upper() == "TB":
+        val *= 1000
+    return int(val)
+
+
 def crawl_neighbors(html: str, axes: Iterable[str], base: str,
-                    keyboard_filter=None) -> list[str]:
+                    keyboard_filter=None, ram_min=None,
+                    storage_min=None, storage_max=None) -> list[str]:
     """Absolute variant URLs reachable by changing one of `axes` from this page.
 
     For the keyboard axis we only follow options whose layout is in
@@ -330,15 +343,25 @@ def crawl_neighbors(html: str, axes: Iterable[str], base: str,
     for label, inner in _iter_select_blocks(html):
         if label not in wanted:
             continue
-        is_keyboard = _AXIS_NAME_RE.get(label) == "keyboard"
+        axis = _AXIS_NAME_RE.get(label)
         for opt_label, val, sel in _options(inner):
             if sel or not val:
                 continue
-            if is_keyboard and kb_allowed:
+            if axis == "keyboard" and kb_allowed:
                 # option label looks like "US (američki engleski)" -> first token
                 first = opt_label.split()[0].upper() if opt_label else ""
                 if first not in kb_allowed:
                     continue
+            elif axis == "ram" and ram_min is not None:
+                gb = _opt_gb(opt_label)
+                if gb is not None and gb < ram_min:
+                    continue          # don't crawl 8 GB
+            elif axis == "storage" and (storage_min or storage_max):
+                gb = _opt_gb(opt_label)
+                if gb is not None and (
+                    (storage_min and gb < storage_min) or
+                    (storage_max and gb > storage_max)):
+                    continue          # don't crawl 128 / 1 TB / 2 TB
             urls.append(val if val.startswith("http") else base + val)
     # de-dup, preserve order
     seen: set[str] = set()
@@ -351,7 +374,8 @@ def crawl_neighbors(html: str, axes: Iterable[str], base: str,
 
 
 def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str],
-                       keyboard_filter: Optional[str] = None) -> VariantPage:
+                       keyboard_filter=None, ram_min=None,
+                       storage_min=None, storage_max=None) -> VariantPage:
     """Parse a fetched variant (or product) page into a VariantPage."""
     vp = VariantPage()
     m = _GA_DETAIL_RE.search(html)
@@ -373,7 +397,8 @@ def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str],
     minst = re.search(r'data-instance-id="(\d+)"', html)
     if minst:
         vp.instance_id = minst.group(1)
-    vp.neighbors = crawl_neighbors(html, crawl_axes, base, keyboard_filter)
+    vp.neighbors = crawl_neighbors(html, crawl_axes, base, keyboard_filter,
+                                   ram_min, storage_min, storage_max)
     return vp
 
 

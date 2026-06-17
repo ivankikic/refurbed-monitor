@@ -142,6 +142,25 @@ def test_neighbors_unfiltered_follows_all_keyboards():
     assert any("/424620/" in u for u in nbrs)  # DK now followed when unfiltered
 
 
+def test_opt_gb_parsing():
+    assert parse._opt_gb("512 GB") == 512
+    assert parse._opt_gb("1 TB") == 1000
+    assert parse._opt_gb("2 TB") == 2000
+    assert parse._opt_gb("16.0 GB") == 16
+
+
+def test_neighbors_prune_storage_range():
+    html = _read("m4air_308042_16-512.html")   # a 16/512 page; 256 GB is a neighbour
+    # storage_min=512 must drop the 256 GB storage neighbour (variant 308040)
+    pruned = parse.crawl_neighbors(html, config.CRAWL_AXES, config.BASE,
+                                   keyboard_filter=["US", "HR"], storage_min=512)
+    assert not any("/308040aa/" in u for u in pruned)
+    # …but it's followed when no range filter is applied
+    full = parse.crawl_neighbors(html, config.CRAWL_AXES, config.BASE,
+                                 keyboard_filter=["US", "HR"])
+    assert any("/308040aa/" in u for u in full)
+
+
 def _run_plain():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

@@ -164,7 +164,13 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
             queue.append(u)
 
     enqueue(product_url)
+    smin = getattr(config, "CRAWL_STORAGE_MIN", None)
+    smax = getattr(config, "CRAWL_STORAGE_MAX", None)
     for s in seeds:
+        # skip 1 TB / 2 TB (and <256) seed entry points — out of target range
+        if s.storage is not None and (
+            (smin and s.storage < smin) or (smax and s.storage > smax)):
+            continue
         enqueue(s.url)
 
     offers: dict[str, Offer] = {}
@@ -181,8 +187,13 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
         if not page_html:
             continue
 
-        vp = parse.parse_variant_page(page_html, base, config.CRAWL_AXES,
-                                      keyboard_filter=config.KEYBOARD_FILTER)
+        vp = parse.parse_variant_page(
+            page_html, base, config.CRAWL_AXES,
+            keyboard_filter=config.KEYBOARD_FILTER,
+            ram_min=getattr(config, "CRAWL_RAM_MIN", None),
+            storage_min=getattr(config, "CRAWL_STORAGE_MIN", None),
+            storage_max=getattr(config, "CRAWL_STORAGE_MAX", None),
+        )
         if vp.found and vp.price is not None:
             var_id, offer_id = _ids_from_url(url)
             s = vp.spec

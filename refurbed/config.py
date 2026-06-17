@@ -84,9 +84,18 @@ CRAWL_AXES = [
                           #   so we reach US variants without exploring every locale
 ]
 
+# Targeted crawl: only follow RAM/storage options the owner actually wants, so
+# every scan COVERS all relevant configs (16-24 GB × 256-512 GB) instead of
+# wasting fetches on 8 GB / 1 TB / 2 TB. This is what lets the light scan see a
+# slightly-pricier-but-better option (e.g. 16/512 Premium) instead of fixating
+# on the cheapest 16/256. Set to None to crawl every value of that axis.
+CRAWL_RAM_MIN = 16             # skip 8 GB RAM options
+CRAWL_STORAGE_MIN = 256        # skip 128 GB
+CRAWL_STORAGE_MAX = 512        # skip 1 TB / 2 TB
+
 MAX_FETCHES_PER_PRODUCT = 70   # hard cap per product/run in FULL mode
-LIGHT_MAX_FETCHES = 8          # smaller cap for frequent "catch-the-steal" runs
-                               #   (~8 cheapest configs/product, polite + quick)
+LIGHT_MAX_FETCHES = 18         # light cap — enough to cover the targeted region
+                               #   per product now that 8GB/1TB/2TB are pruned
 REQUEST_DELAY = 1.0            # seconds between requests (jitter added)
 REQUEST_JITTER = 0.6          # +/- random jitter on the delay
 REQUEST_TIMEOUT = 25          # per-request timeout, seconds
