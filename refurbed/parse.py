@@ -201,6 +201,7 @@ class VariantPage:
     spec: Spec = field(default_factory=Spec)
     battery: Optional[str] = None  # 'optimal' | 'new'
     available: bool = False
+    avail_explicit: bool = False   # True if an in-stock/sold-out marker was found
     offer_id: Optional[str] = None
     instance_id: Optional[str] = None
     neighbors: list[str] = field(default_factory=list)  # variant URLs to crawl
@@ -254,8 +255,12 @@ def parse_availability(html: str) -> bool:
         return True
     if "Odabrani proizvodi su rasprodani" in html:
         return False
-    # Default conservative: treat as sold-out if we can't see the in-stock hook.
-    return False
+    # Fail-OPEN: if NEITHER marker is present (e.g. refurbed changed its markup),
+    # assume available so a real deal is never silently hidden. The run-level
+    # canary in monitor.py warns if availability detection looks broken (≈0% in
+    # stock across a whole run), so a markup change surfaces instead of going
+    # silently dark.
+    return True
 
 
 _AXIS_NAME_RE = {  # axis label -> the <select>'s purpose
@@ -393,6 +398,8 @@ def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str],
         original, _disc = parse_real_discount(html)
         vp.list_price = original if (original and original > vp.price) else None
     vp.available = parse_availability(html)
+    vp.avail_explicit = ('data-test="in-stock' in html
+                         or "Odabrani proizvodi su rasprodani" in html)
     vp.battery = selected_battery(html)
     minst = re.search(r'data-instance-id="(\d+)"', html)
     if minst:

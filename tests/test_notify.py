@@ -9,6 +9,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from refurbed import config, notify  # noqa: E402
+from refurbed.analyze import Offer, Report  # noqa: E402
+
+
+def _offer(price, ram=16, storage=512, vid="x"):
+    return Offer(product="m4", model="M4 Air", chip="M4", chip_tier="", ram=ram,
+                 storage=storage, color="midnight", condition="Premium",
+                 cond_rank=3, battery="optimal", keyboard="US", price=price,
+                 list_price=None, available=True, url=f"http://x/{vid}",
+                 variant_id=vid)
 
 
 def _seen(**kv):
@@ -71,6 +80,29 @@ def test_save_seen_roundtrip(tmp_path=None):
                       "OLD": "legacy-string"}, p)   # legacy string dropped
     data = json.load(open(p))
     assert "A" in data and "OLD" not in data
+
+
+def test_new_offers_filters_and_dedups():
+    o1 = _offer(1070, vid="a")              # new
+    o2 = _offer(1031, storage=256, vid="b")  # not new
+    rep = Report(offers=[o1, o2], deals=[o1, o2], paths={}, anomalies=[],
+                 picks=[o1, o2], underpriced=[])
+    keys = {notify.offer_key(o1)}
+    fresh = notify.new_offers(rep, keys)
+    assert len(fresh) == 1 and fresh[0].variant_id == "a"
+
+
+def test_append_history_writes_record():
+    import json
+    import tempfile
+    o1 = _offer(1070, vid="a")
+    rep = Report(offers=[o1], deals=[o1], paths={}, anomalies=[], picks=[o1],
+                 underpriced=[])
+    p = os.path.join(tempfile.mkdtemp(), "h.jsonl")
+    notify.append_history(rep, {notify.offer_key(o1)}, "full", notify.now_iso(),
+                          True, p)
+    rec = json.loads(open(p).read().strip())
+    assert rec["n_offers"] == 1 and rec["emitted"] is True and len(rec["new"]) == 1
 
 
 def _run_plain():

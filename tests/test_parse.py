@@ -116,6 +116,14 @@ def test_availability_not_fooled_by_gotovo_rasprodano():
 # --------------------------------------------------------------------------- #
 # Seeds + neighbour crawl links
 # --------------------------------------------------------------------------- #
+def test_availability_fail_open():
+    # markup with NO in-stock and NO sold-out marker -> assume available (fail-open)
+    assert parse.parse_availability("<div>some page without markers</div>") is True
+    # explicit sold-out still detected
+    assert parse.parse_availability(
+        "Odabrani proizvodi su rasprodani, odaberite drugu opciju") is False
+
+
 def test_product_seeds():
     seeds = parse.parse_product_seeds(_read("m4air_product.html"))
     assert len(seeds) == 6

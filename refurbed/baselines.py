@@ -48,8 +48,18 @@ def save(baselines: dict, path: str = BASELINE_PATH) -> None:
         json.dump(baselines, fh, ensure_ascii=False, indent=1, sort_keys=True)
 
 
+def _minutes_since(iso: str) -> float:
+    try:
+        return (datetime.now(timezone.utc)
+                - datetime.fromisoformat(iso)).total_seconds() / 60.0
+    except (ValueError, TypeError):
+        return 1e9
+
+
 def update(baselines: dict, offers: list[Offer]) -> dict:
-    """Record the cheapest AVAILABLE price per config this run (one sample each)."""
+    """Record the cheapest AVAILABLE price per config, THROTTLED so we add at
+    most one sample per config per BASELINE_SAMPLE_MIN_MINUTES — this decouples
+    the baseline horizon (~8 days) from the scan rate (every 15 min)."""
     cheapest: dict[str, float] = {}
     for o in offers:
         if not o.available:
@@ -58,17 +68,34 @@ def update(baselines: dict, offers: list[Offer]) -> dict:
         if k not in cheapest or o.price < cheapest[k]:
             cheapest[k] = o.price
     now = _now()
-    win = getattr(config, "BASELINE_WINDOW", 60)
+    win = getattr(config, "BASELINE_WINDOW", 200)
+    gap = getattr(config, "BASELINE_SAMPLE_MIN_MINUTES", 50)
     for k, price in cheapest.items():
-        rec = baselines.setdefault(k, {"samples": [], "min": price, "updated": now})
+        rec = baselines.get(k)
+        if rec is None:
+            baselines[k] = {"samples": [round(price, 2)], "updated": now}
+            continue
+        if _minutes_since(rec.get("updated", "")) < gap:
+            continue                       # throttle redundant samples
         rec["samples"] = (rec.get("samples", []) + [round(price, 2)])[-win:]
-        rec["min"] = min(rec.get("min", price), price)
         rec["updated"] = now
     return baselines
 
 
+def _trimmed_typical(samples: list) -> float:
+    """Median after trimming the tails — so a lingering steal or a one-off price
+    glitch can't drag the 'typical' price down."""
+    s = sorted(samples)
+    n = len(s)
+    trim = int(n * getattr(config, "BASELINE_TRIM_PCT", 15) / 100)
+    core = s[trim: n - trim] if n - 2 * trim >= 1 else s
+    return statistics.median(core)
+
+
 def stats(baselines: dict, key: str) -> Optional[dict]:
-    """Trusted baseline for a config, or None if not enough history yet."""
+    """Trusted baseline for a config, or None if not enough history yet.
+    'median' = trimmed typical price; 'min' = WINDOWED all-time-low (rolls off old
+    samples, so a stale glitch doesn't define the low forever)."""
     rec = baselines.get(key)
     if not rec:
         return None
@@ -76,8 +103,8 @@ def stats(baselines: dict, key: str) -> Optional[dict]:
     if len(samples) < getattr(config, "BASELINE_MIN_SAMPLES", 4):
         return None
     return {
-        "median": statistics.median(samples),
-        "min": rec.get("min"),
+        "median": _trimmed_typical(samples),
+        "min": min(samples),
         "n": len(samples),
     }
 

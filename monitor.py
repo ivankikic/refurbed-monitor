@@ -70,13 +70,20 @@ def main(argv=None) -> int:
     # 2. analyse (silicon + US/HR filters + baseline annotation inside) ------ #
     bl = baselines.load()
     report = analyze.build_report(offers, bl)
-    # Learn typical prices from FULL runs only (they crawl the whole matrix);
-    # light runs just read the baselines to flag below-typical steals.
-    if args.mode == "full" and not args.no_state:
+    # Every run feeds baselines (throttled to ~1 sample/config/hour inside update).
+    if not args.no_state:
         baselines.update(bl, report.offers)
         baselines.save(bl)
-        print(f"   baselines: {len(bl)} configs tracked in baselines.json")
+        print(f"   baselines: {len(bl)} configs tracked")
     excluded = len(offers) - len(report.offers)
+
+    # Canary: fail-open availability means a markup change would make everything
+    # look in-stock. If almost no page had an EXPLICIT in-stock/sold-out marker,
+    # detection is probably broken — surface it instead of silently trusting it.
+    explicit = sum(1 for o in report.offers if o.avail_explicit)
+    if report.offers and explicit / len(report.offers) < 0.10:
+        print("   ⚠️  CANARY: availability markers nearly absent — refurbed markup "
+              "may have changed; verify parse_availability().")
     if excluded:
         kb = config.KEYBOARD_FILTER or "any"
         print(f"Excluded {excluded} configs (Intel or keyboard not in {kb}).")
@@ -115,6 +122,7 @@ def main(argv=None) -> int:
             fh.write(html_body)
         print("   (--dry-run: HTML preview written to last_email.html)")
 
+    emitted = False
     if alert_keys:
         print(f">> {len(alert_keys)} NEW/cheaper: {subject}")
         if args.dry_run:
@@ -122,16 +130,18 @@ def main(argv=None) -> int:
         else:
             sent = notify.send_email(subject, body, html_body)
             notify.send_telegram(subject, body)
+            emitted = bool(sent)
             if not sent:
                 print("   (email not sent; state still updated so you won't be "
                       "re-spammed — use --no-state while testing)")
     else:
         print(">> Nothing new or cheaper — no email (this is the no-change case).")
 
-    # 5. persist state ------------------------------------------------------ #
+    # 5. persist state + append the results log ----------------------------- #
     if not args.no_state:
         notify.save_seen(new_seen)
-        print(f"   state: {len(new_seen)} configs tracked in seen.json")
+        notify.append_history(report, alert_keys, args.mode, ts, emitted)
+        print(f"   state: {len(new_seen)} configs tracked • history.jsonl appended")
 
     return 0
 

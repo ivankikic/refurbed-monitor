@@ -20,9 +20,10 @@ from typing import Optional
 import requests
 
 from . import config
-from .analyze import Anomaly, Offer, Report
+from .analyze import Anomaly, Offer, Report, best_per_machine, value_score
 
 STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "seen.json")
+HISTORY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "history.jsonl")
 SEEN_TTL_DAYS = 30
 
 
@@ -125,6 +126,47 @@ def compute_alerts(current: dict, seen: dict) -> tuple:
 
 
 # --------------------------------------------------------------------------- #
+# New-this-run offers + append-only history log (for later tuning)
+# --------------------------------------------------------------------------- #
+def new_offers(report: Report, alert_keys: set) -> list[Offer]:
+    """Offers that are genuinely NEW/cheaper this run (one per machine, best
+    variant, ranked) — the actual reason an email is being sent."""
+    fresh = [o for o in report.offers if offer_key(o) in alert_keys]
+    fresh = best_per_machine(fresh)
+    fresh.sort(key=value_score, reverse=True)
+    return fresh
+
+
+def _pick_record(o: Offer) -> dict:
+    return {"model": o.model, "ram": o.ram, "storage": o.storage, "color": o.color,
+            "condition": o.condition, "battery": o.battery, "keyboard": o.keyboard,
+            "price": round(o.price, 2), "discount_pct": o.discount_pct,
+            "vs_baseline_pct": o.vs_baseline_pct, "all_time_low": o.all_time_low,
+            "available": o.available, "url": o.url, "key": offer_key(o)}
+
+
+def append_history(report: Report, alert_keys: set, mode: str, ts: str,
+                   emitted: bool, path: str = HISTORY_PATH) -> None:
+    """Append one JSON line per run so we can later analyse real results and tune
+    the algorithm. Quiet runs log a slim record."""
+    rec = {
+        "ts": ts, "mode": mode, "emitted": emitted,
+        "n_offers": len(report.offers),
+        "n_available": sum(1 for o in report.offers if o.available),
+        "n_alerts": len(alert_keys),
+        "n_anomalies": len(report.anomalies),
+        "picks": [_pick_record(o) for o in report.picks],
+        "new": [_pick_record(o) for o in new_offers(report, alert_keys)],
+        "underpriced": [_pick_record(o) for o in report.underpriced[:10]],
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"  [history] could not append: {exc}")
+
+
+# --------------------------------------------------------------------------- #
 # Rendering
 # --------------------------------------------------------------------------- #
 def _wrap(text: str, width: int = 64) -> str:
@@ -184,6 +226,21 @@ def render_text(report: Report, alert_keys: set, ts: str, ai=None) -> str:
         L.append("")
         L.append(_wrap(ai.summary))
     L.append("=" * 64)
+
+    # ---- NOVO (the actual reason for this email) -------------------------- #
+    fresh = new_offers(report, alert_keys)
+    if fresh:
+        L.append("")
+        L.append(f"🆕 NOVO / JEFTINIJE OD ZADNJE PROVJERE ({len(fresh)})")
+        L.append("-" * 64)
+        for o in fresh[:8]:
+            disc = f" −{o.discount_pct:.0f}%" if o.discount_pct else ""
+            L.append(f"  • {o.price:.0f} €{disc}  {o.model} "
+                     f"[{o.ram}/{o.storage} {o.color} {o.condition} {o.keyboard or '?'}]")
+            note = _baseline_note(o)
+            if note:
+                L.append(f"      ↘ {note}")
+            L.append(f"      {o.url}")
 
     # ---- TOP PONUDE (ranked) --------------------------------------------- #
     L.append("")
@@ -321,6 +378,30 @@ def render_html(report: Report, alert_keys: set, ts: str, ai=None) -> str:
     if ai is not None and ai.summary:
         o_.append(f'<p style="font-size:15px;line-height:1.55;margin:6px 0 14px">'
                   f'{_esc(ai.summary)}</p>')
+
+    # ----- NOVO table (the reason for this email) -------------------------- #
+    fresh = new_offers(report, alert_keys)
+    if fresh:
+        o_.append('<h2 style="margin:14px 0 8px;font-size:18px">🆕 Novo / jeftinije '
+                  '<span style="font-weight:400;font-size:13px;color:#999">'
+                  '(od zadnje provjere)</span></h2>')
+        o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
+        o_.append(_th(["Cijena", "Popust", "vs tip.", "Model", "RAM/SSD",
+                       "Stanje", "Tipk.", ""]))
+        for o in fresh[:8]:
+            disc = (f'<span style="color:#1a8f3c;font-weight:700">'
+                    f'−{o.discount_pct:.0f}%</span>' if o.discount_pct else "—")
+            buy = (f'<a href="{_esc(o.url)}" style="color:#fff;background:#5b51d8;'
+                   f'padding:5px 11px;border-radius:6px;text-decoration:none;'
+                   f'font-weight:600">Kupi&nbsp;›</a>')
+            cells = [
+                _cell(f'<b style="font-size:14px">{o.price:.0f}&nbsp;€</b>'),
+                _cell(disc), _cell(_vs_typical_html(o)), _cell(_esc(o.model)),
+                _cell(f'{o.ram}/{o.storage}'), _cell(_esc(o.condition)),
+                _cell(_esc(o.keyboard or "?")), _cell(buy),
+            ]
+            o_.append('<tr style="background:#fffbe6">' + "".join(cells) + "</tr>")
+        o_.append("</table>")
 
     # ----- TOP PONUDE table ------------------------------------------------ #
     src = "AI rangirano" if (ai and ai.picks) else "rangirano po vrijednosti"

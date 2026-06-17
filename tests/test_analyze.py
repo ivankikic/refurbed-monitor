@@ -130,6 +130,27 @@ def test_discount_pct_and_steal_tier():
     assert rep.picks[0].variant_id == "steal"
 
 
+def test_best_per_machine_groups_and_keeps_best_variant():
+    offers = [
+        mk(ram=16, storage=512, cond="Vrlo dobar", rank=1, price=1035, vid="vd"),
+        mk(ram=16, storage=512, cond="Premium", rank=3, price=1070, vid="prem"),  # better
+        mk(ram=16, storage=256, cond="Premium", rank=3, price=1031, vid="small"),
+    ]
+    best = analyze.best_per_machine(offers)
+    vids = sorted(o.variant_id for o in best)
+    # 16/512 collapses to ONE (the Premium, higher value); 16/256 stays separate
+    assert vids == ["prem", "small"]
+
+
+def test_top_picks_one_per_machine_prefers_better_storage():
+    offers = [
+        mk(ram=16, storage=256, cond="Vrlo dobar", rank=1, price=1031, vid="s256"),
+        mk(ram=16, storage=512, cond="Premium", rank=3, price=1070, vid="s512"),
+    ]
+    picks = analyze.top_picks(offers)
+    assert picks[0].variant_id == "s512"   # better variant ranks first
+
+
 def test_intel_excluded_even_if_cheap():
     offers = [
         mk(ram=32, storage=512, chip=None, price=253.0, model="MBP 13 Intel", vid="intel"),

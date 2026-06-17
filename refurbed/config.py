@@ -38,8 +38,12 @@ TARGET_SPECS = [(16, 256), (16, 512), (24, 512)]
 # run and keep a rolling window, so we learn the TYPICAL price of each config.
 # An offer priced well below that typical is the gold (e.g. M4 Air 24/512 that's
 # usually ~1350 € showing up at ~1000 €).
-BASELINE_WINDOW = 60        # samples kept per config (full runs ~4/day → ~2 wks)
+BASELINE_WINDOW = 200       # samples kept per config (throttled to ~1/hour → ~8 days)
 BASELINE_MIN_SAMPLES = 4    # need this many before a baseline is trusted
+BASELINE_SAMPLE_MIN_MINUTES = 50   # don't add >1 sample/config within this gap
+                                   #   (decouples baseline horizon from scan rate)
+BASELINE_TRIM_PCT = 15      # trim this % off each tail when computing "typical"
+                            #   (a lingering steal / glitch can't drag the median)
 UNDERPRICED_PCT = 12.0      # flag an offer >= this % below its config's typical
 
 # Hard rule: Apple Silicon only. Intel Macs are excluded no matter how cheap.
@@ -93,9 +97,12 @@ CRAWL_RAM_MIN = 16             # skip 8 GB RAM options
 CRAWL_STORAGE_MIN = 256        # skip 128 GB
 CRAWL_STORAGE_MAX = 512        # skip 1 TB / 2 TB
 
-MAX_FETCHES_PER_PRODUCT = 70   # hard cap per product/run in FULL mode
-LIGHT_MAX_FETCHES = 18         # light cap — enough to cover the targeted region
-                               #   per product now that 8GB/1TB/2TB are pruned
+# One targeted scan now does everything (see DEPLOY.md). Because the crawl is
+# pruned to the relevant region (16-24 GB × 256-512 GB × US/HR), this cap covers
+# essentially all configs the owner cares about per product. If a run hits the
+# cap it's logged (possible coverage truncation → raise this).
+MAX_FETCHES_PER_PRODUCT = 50
+LIGHT_MAX_FETCHES = 18         # only used by the optional `--mode light` quick check
 REQUEST_DELAY = 1.0            # seconds between requests (jitter added)
 REQUEST_JITTER = 0.6          # +/- random jitter on the delay
 REQUEST_TIMEOUT = 25          # per-request timeout, seconds

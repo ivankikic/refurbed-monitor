@@ -1,25 +1,22 @@
-name: refurbed monitor (full)
+name: refurbed monitor
 
-# Deep crawl — the complete matrix + anomalies — a few times a day.
-# GitHub cron is UTC. 6/11/16/20 UTC ≈ 08/13/18/22 Zagreb (summer).
 on:
-  # Driven EXTERNALLY by cron-job.org (4×/day) via the workflow_dispatch REST
-  # API — GitHub's own scheduled cron is unreliable. See DEPLOY.md.
+  # ONE targeted scan drives everything. Scheduling is external via cron-job.org
+  # (GitHub's own cron is throttled/unreliable) calling this workflow_dispatch
+  # every 15 min. See DEPLOY.md.
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
-# Shared across BOTH workflows so the full + light runs never overlap and never
-# fight over seen.json.
 concurrency:
-  group: refurbed-monitor
+  group: refurbed-monitor      # never run two scans at once / no seen.json races
   cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,7 +25,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Run monitor (full crawl → AI rank → email new finds)
+      - name: Run monitor (targeted crawl → baselines → AI rank → email new finds)
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
@@ -36,16 +33,16 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python3 monitor.py --mode full
+        run: python3 monitor.py
 
-      - name: Persist state (seen.json + baselines.json)
+      - name: Persist state (seen.json + baselines.json + history.jsonl)
         if: always()
         run: |
-          git add seen.json baselines.json
+          git add seen.json baselines.json history.jsonl
           if git diff --cached --quiet; then echo "no state changes"; exit 0; fi
           git config user.name  "refurbed-monitor[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "state: update seen.json + baselines.json (full) [skip ci]"
+          git commit -m "state: seen + baselines + history [skip ci]"
           for i in 1 2 3; do
             git pull --rebase origin main && git push && break || sleep 4
           done

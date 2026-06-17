@@ -38,6 +38,7 @@ class Offer:
     url: str
     variant_id: Optional[str] = None
     offer_id: Optional[str] = None
+    avail_explicit: bool = True       # was availability read from a real marker?
     # filled in by baselines.annotate() — "how this price compares to typical"
     baseline_median: Optional[float] = None
     vs_baseline_pct: float = 0.0      # % below the config's typical price
@@ -124,9 +125,22 @@ def collapse_by_config(offers: list[Offer]) -> list[Offer]:
     return list(best.values())
 
 
+def best_per_machine(offers: list[Offer]) -> list[Offer]:
+    """One offer per (model, RAM, storage) — the BEST variant by value_score, so
+    colours/conditions of the same machine don't each take a slot and the best
+    one (e.g. 16/512 Premium) wins instead of a worse-cheaper sibling."""
+    best: dict = {}
+    for o in offers:
+        k = (o.product, o.ram, o.storage)
+        if k not in best or value_score(o) > value_score(best[k]):
+            best[k] = o
+    return list(best.values())
+
+
 def top_picks(offers: list[Offer], n: int | None = None) -> list[Offer]:
-    """Best buyable offers, ranked. Candidates = available, US, silicon, within
-    budget and >= good-enough spec, PLUS any in-budget 'dream discount' steal."""
+    """Best buyable offers, ranked, ONE per (model, RAM, storage). Candidates =
+    available, US/HR, silicon, within budget and >= good-enough spec, PLUS any
+    in-budget 'dream discount' steal."""
     dream = getattr(config, "DREAM_DISCOUNT_PCT", 100)
     cands = [
         o for o in offers
@@ -135,7 +149,7 @@ def top_picks(offers: list[Offer], n: int | None = None) -> list[Offer]:
         # a "dream discount" can excuse low storage, but never low RAM
         and (o.storage >= config.GOOD_STORAGE or o.discount_pct >= dream)
     ]
-    cands = collapse_by_config(cands)        # one listing per identical machine
+    cands = best_per_machine(cands)          # best variant per machine, no dupes
     cands.sort(key=value_score, reverse=True)
     return cands[: (n or config.TOP_PICKS)]
 

@@ -59,14 +59,15 @@ github.com → Settings → Developer settings → **Fine-grained tokens** → G
 - Permissions → Repository → **Actions: Read and write** (Metadata: Read is auto)
 - Copy the `github_pat_…` token.
 
-**2. Add two cron-job.org jobs** (Account → set timezone Europe/Zagreb first):
+**2. Add ONE cron-job.org job** (Account → set timezone Europe/Zagreb first).
+There is now a single targeted scan (no more light/full split):
 
-| | LIGHT | FULL |
-|---|---|---|
-| URL | `https://api.github.com/repos/ivankikic/refurbed-monitor/actions/workflows/monitor-light.yml/dispatches` | `…/workflows/monitor.yml/dispatches` |
-| Schedule | every 20 min (`*/20`) | 4×/day (08:00, 13:00, 18:00, 22:00) |
+| | SCAN |
+|---|---|
+| URL | `https://api.github.com/repos/ivankikic/refurbed-monitor/actions/workflows/monitor.yml/dispatches` |
+| Schedule | every 15 min (`*/15` or "Every 15 minutes") |
 
-For **both**, in the job's *Advanced → request settings*:
+In the job's *Advanced → request settings*:
 - Method: **POST**
 - Headers:
   - `Accept: application/vnd.github+json`

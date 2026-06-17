@@ -217,6 +217,7 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
                         price=vp.price,
                         list_price=vp.list_price,
                         available=vp.available,
+                        avail_explicit=vp.avail_explicit,
                         url=url,
                         variant_id=s.variant_id or var_id,
                         offer_id=offer_id,
@@ -226,10 +227,13 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
         for n in vp.neighbors:
             enqueue(n)
 
+    truncated = bool(queue) and fetches >= config.MAX_FETCHES_PER_PRODUCT
     if verbose:
         avail = sum(1 for o in offers.values() if o.available)
+        warn = (f"  ⚠️ CAP HIT ({len(queue)} configs unvisited — raise "
+                f"MAX_FETCHES_PER_PRODUCT)" if truncated else "")
         print(f"  {slug}: {fetches} fetches -> {len(offers)} configs "
-              f"({avail} available)")
+              f"({avail} available){warn}")
     return list(offers.values())
 
 

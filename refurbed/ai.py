@@ -21,7 +21,7 @@ from typing import Optional
 import requests
 
 from . import config
-from .analyze import Offer, Report
+from .analyze import Offer, Report, value_score
 
 API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
            "{model}:generateContent?key={key}")
@@ -146,7 +146,9 @@ def build_candidates(report: Report) -> list[Offer]:
         if a.upgrade.price <= config.CEILING:
             add(a.upgrade, f"anomalija:{a.kind.lower()} {a.delta:+.0f}€")
 
-    ordered.sort(key=lambda o: o.discount_pct, reverse=True)
+    # sort by overall VALUE (not just discount %) so a high-value bagatela with a
+    # smaller list-discount isn't truncated out of the candidate cap
+    ordered.sort(key=value_score, reverse=True)
     ordered = ordered[: getattr(config, "GEMINI_MAX_CANDIDATES", 40)]
     # stash tags on the offers via a side dict the caller can read back by index
     build_candidates.last_tags = [tags.get(id(o), []) for o in ordered]  # type: ignore[attr-defined]
