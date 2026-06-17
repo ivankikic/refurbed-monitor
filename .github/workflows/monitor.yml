@@ -3,8 +3,8 @@ name: refurbed monitor (full)
 # Deep crawl — the complete matrix + anomalies — a few times a day.
 # GitHub cron is UTC. 6/11/16/20 UTC ≈ 08/13/18/22 Zagreb (summer).
 on:
-  schedule:
-    - cron: "0 6,11,16,20 * * *"
+  # Driven EXTERNALLY by cron-job.org (4×/day) via the workflow_dispatch REST
+  # API — GitHub's own scheduled cron is unreliable. See DEPLOY.md.
   workflow_dispatch: {}
 
 permissions:

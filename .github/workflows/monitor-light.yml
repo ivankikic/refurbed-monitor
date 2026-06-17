@@ -3,8 +3,9 @@ name: refurbed monitor (light)
 # Fast, polite scan of just the cheapest configs — runs often to catch steals
 # that vanish in minutes. ~8 fetches/product, ~1 min/run.
 on:
-  schedule:
-    - cron: "*/20 * * * *"     # every 20 minutes (UTC). Dial back if you like.
+  # Scheduling is driven EXTERNALLY by cron-job.org (reliable — GitHub's own cron
+  # is throttled to ~hourly), which calls the workflow_dispatch REST API every
+  # 20 min. See DEPLOY.md → "Reliable scheduling via cron-job.org".
   workflow_dispatch: {}
 
 permissions:

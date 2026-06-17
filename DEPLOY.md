@@ -46,9 +46,36 @@ the same deals every time).
    workflow**. First run emails everything found, then commits `seen.json`.
    Subsequent scheduled runs only email new finds.
 
-### Schedule / timezone
-GitHub cron is **UTC**. The workflow uses `0 6,11,16,20 * * *` ≈ 08/13/18/22
-Zagreb in summer (UTC+2). Edit the `cron:` line to taste.
+### Reliable scheduling via cron-job.org
+GitHub's own `schedule:` cron is **best-effort and throttled** — `*/20` actually
+fires every ~40 min–1h45 and slots get skipped. So scheduling is driven by
+**[cron-job.org](https://cron-job.org)** (free) instead, which calls GitHub's
+`workflow_dispatch` REST API on time. The workflows therefore only declare
+`workflow_dispatch` (no `schedule:`).
+
+**1. Create a fine-grained GitHub token** —
+github.com → Settings → Developer settings → **Fine-grained tokens** → Generate:
+- Repository access → **Only select repositories** → `refurbed-monitor`
+- Permissions → Repository → **Actions: Read and write** (Metadata: Read is auto)
+- Copy the `github_pat_…` token.
+
+**2. Add two cron-job.org jobs** (Account → set timezone Europe/Zagreb first):
+
+| | LIGHT | FULL |
+|---|---|---|
+| URL | `https://api.github.com/repos/ivankikic/refurbed-monitor/actions/workflows/monitor-light.yml/dispatches` | `…/workflows/monitor.yml/dispatches` |
+| Schedule | every 20 min (`*/20`) | 4×/day (08:00, 13:00, 18:00, 22:00) |
+
+For **both**, in the job's *Advanced → request settings*:
+- Method: **POST**
+- Headers:
+  - `Accept: application/vnd.github+json`
+  - `Authorization: Bearer github_pat_…`
+  - `X-GitHub-Api-Version: 2022-11-28`
+- Body: `{"ref":"main"}`
+
+A successful call returns **HTTP 204**; the run then shows in the Actions tab as
+a `workflow_dispatch` event. (Verified working.)
 
 ### Two caveats (both easy)
 - **Delays:** scheduled Actions can start a few minutes late under load. Fine for
