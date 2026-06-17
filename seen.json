@@ -1,7 +1,7 @@
 {
  "ANOM|POHRANA|apple-macbook-air-m1-2020|8/256|silver|Vrlo dobar|optimal": {
   "p": 452.0,
-  "t": "2026-06-17T07:17:01+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  },
  "ANOM|POHRANA|apple-macbook-air-m1-2020|8/256|spacegrey|Odlično|optimal": {
   "p": 539.99,
@@ -17,7 +17,7 @@
  },
  "OFF|apple-macbook-air-m2-2022|16/1000|midnight|Premium|US|optimal": {
   "p": 875.0,
-  "t": "2026-06-17T08:46:55+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  },
  "OFF|apple-macbook-air-m3-2024|16/512|midnight|Odlično|US|optimal": {
   "p": 1083.99,
@@ -25,7 +25,7 @@
  },
  "OFF|apple-macbook-air-m4-2025|16/256|midnight|Vrlo dobar|US|optimal": {
   "p": 1031.0,
-  "t": "2026-06-17T08:46:55+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/512|midnight|Dobar|US|new": {
   "p": 1025.0,
@@ -37,14 +37,14 @@
  },
  "PATH|16/256": {
   "p": 833.0,
-  "t": "2026-06-17T08:46:55+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  },
  "PATH|16/512": {
   "p": 833.0,
-  "t": "2026-06-17T08:46:55+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  },
  "PATH|24/512": {
   "p": 1324.15,
-  "t": "2026-06-17T08:46:55+00:00"
+  "t": "2026-06-17T09:02:22+00:00"
  }
 }
