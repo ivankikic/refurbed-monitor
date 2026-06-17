@@ -155,6 +155,11 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
     # Seed queue: JSON-LD variant URLs + the product page itself (its default
     # config is a real, fully-specced offer too).
     seeds = parse.parse_product_seeds(html)
+    # Breadth-first (FIFO) over the TARGETED graph (RAM>=16, storage 256-512,
+    # US/HR). FIFO interleaves the 8 GB seeds' RAM-bridges so we reach the 16 GB
+    # region from every colour/condition, instead of a price-queue draining all
+    # the cheap 8 GB first. Sub-floor (8 GB) pages are entry points only — we
+    # explore through them but don't keep them as offers.
     queue: deque[str] = deque()
     queued: set[str] = set()
 
@@ -164,13 +169,7 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
             queue.append(u)
 
     enqueue(product_url)
-    smin = getattr(config, "CRAWL_STORAGE_MIN", None)
-    smax = getattr(config, "CRAWL_STORAGE_MAX", None)
     for s in seeds:
-        # skip 1 TB / 2 TB (and <256) seed entry points — out of target range
-        if s.storage is not None and (
-            (smin and s.storage < smin) or (smax and s.storage > smax)):
-            continue
         enqueue(s.url)
 
     offers: dict[str, Offer] = {}
@@ -187,16 +186,17 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
         if not page_html:
             continue
 
+        # Broad crawl within US/HR (keyboard targeting only — robust); relevance
+        # (>=16 GB, 256-512 GB) is enforced later in the analysis filters. This
+        # is the validated behaviour that reliably reaches the 16 GB region even
+        # for models whose cheapest seeds are 8 GB (M1/M2 Air).
         vp = parse.parse_variant_page(
             page_html, base, config.CRAWL_AXES,
             keyboard_filter=config.KEYBOARD_FILTER,
-            ram_min=getattr(config, "CRAWL_RAM_MIN", None),
-            storage_min=getattr(config, "CRAWL_STORAGE_MIN", None),
-            storage_max=getattr(config, "CRAWL_STORAGE_MAX", None),
         )
+        s = vp.spec
         if vp.found and vp.price is not None:
             var_id, offer_id = _ids_from_url(url)
-            s = vp.spec
             if s.ram is not None and s.storage is not None:
                 key = _dedup_key(vp)
                 existing = offers.get(key)
@@ -223,7 +223,8 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
                         offer_id=offer_id,
                     )
 
-        # enqueue 1-axis neighbours
+        # explore all 1-axis neighbours (targeting already pruned 8GB/1TB/2TB and
+        # non-US/HR); FIFO keeps coverage even across 8 GB entry points
         for n in vp.neighbors:
             enqueue(n)
 

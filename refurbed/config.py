@@ -88,20 +88,18 @@ CRAWL_AXES = [
                           #   so we reach US variants without exploring every locale
 ]
 
-# Targeted crawl: only follow RAM/storage options the owner actually wants, so
-# every scan COVERS all relevant configs (16-24 GB × 256-512 GB) instead of
-# wasting fetches on 8 GB / 1 TB / 2 TB. This is what lets the light scan see a
-# slightly-pricier-but-better option (e.g. 16/512 Premium) instead of fixating
-# on the cheapest 16/256. Set to None to crawl every value of that axis.
-CRAWL_RAM_MIN = 16             # skip 8 GB RAM options
-CRAWL_STORAGE_MIN = 256        # skip 128 GB
-CRAWL_STORAGE_MAX = 512        # skip 1 TB / 2 TB
+# NOTE: the crawl is broad WITHIN US/HR (keyboard targeting only) and relevance
+# (>=16 GB, >=256 GB) is enforced in the analysis filters — NOT by pruning the
+# crawl graph. Pruning RAM/storage during the BFS proved fragile for models whose
+# cheapest seeds are 8 GB (M1/M2 Air): it starved the 16 GB region. The broad
+# crawl reliably reaches it. (crawl_neighbors still supports range args for
+# experiments, but the production crawl doesn't pass them.)
 
-# One targeted scan now does everything (see DEPLOY.md). Because the crawl is
-# pruned to the relevant region (16-24 GB × 256-512 GB × US/HR), this cap covers
-# essentially all configs the owner cares about per product. If a run hits the
-# cap it's logged (possible coverage truncation → raise this).
-MAX_FETCHES_PER_PRODUCT = 50
+# One scan does everything (see DEPLOY.md). Cap bounds the per-product fetches;
+# 150 fully covers the US/HR matrix for the biggest models (M1 Air ≈ 149). If a
+# run logs CAP HIT, raise this. ~half the fetches are non-US/HR pages reached en
+# route (filtered out in analysis) — the price of robust coverage.
+MAX_FETCHES_PER_PRODUCT = 150
 LIGHT_MAX_FETCHES = 18         # only used by the optional `--mode light` quick check
 REQUEST_DELAY = 1.0            # seconds between requests (jitter added)
 REQUEST_JITTER = 0.6          # +/- random jitter on the delay

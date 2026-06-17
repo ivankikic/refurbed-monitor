@@ -180,10 +180,10 @@ def rank(report: Report, *, verbose: bool = True) -> Optional[AIResult]:
             "responseMimeType": "application/json",
             "responseSchema": _RESPONSE_SCHEMA,
             "temperature": 0.3,
-            # Headroom for gemini-2.5 thinking tokens + the JSON. NOTE: do NOT
-            # also set thinkingConfig.thinkingBudget=0 — combined with a
-            # responseSchema it truncates the JSON mid-output.
-            "maxOutputTokens": 8192,
+            # Generous headroom: gemini-2.5 thinking tokens are counted here too,
+            # and a truncated response = lost AI ranking. NOTE: do NOT also set
+            # thinkingConfig.thinkingBudget=0 — with a responseSchema it truncates.
+            "maxOutputTokens": 16000,
         },
     }
     url = API_URL.format(model=config.GEMINI_MODEL, key=key)
