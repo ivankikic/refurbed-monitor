@@ -53,15 +53,15 @@
  },
  "ANOM|BATERIJA|apple-macbook-air-m3-2024|8/256|midnight|Odlično|new": {
   "p": 999.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|BATERIJA|apple-macbook-air-m3-2024|8/512|starlight|Odlično|new": {
   "p": 1069.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|BATERIJA|apple-macbook-air-m4-2025|16/256|midnight|Vrlo dobar|new": {
   "p": 1054.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|BATERIJA|apple-macbook-pro-2021-m1-14|16/1000|spacegrey|Odlično|new": {
   "p": 1044.99,
@@ -70,6 +70,10 @@
  "ANOM|BATERIJA|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Odlično|new": {
   "p": 915.0,
   "t": "2026-06-17T13:34:34+00:00"
+ },
+ "ANOM|BATERIJA|apple-macbook-pro-2021-m1-14|32/512|silver|Dobar|new": {
+  "p": 1010.0,
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|BATERIJA|apple-macbook-pro-2021-m1-16-2|16/1000|silver|Odlično|new": {
   "p": 1179.99,
@@ -93,7 +97,7 @@
  },
  "ANOM|BATERIJA|apple-macbook-pro-2024-m4-14|24/1000|standard glass silver|Premium|new": {
   "p": 1718.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|BATERIJA|apple-macbook-pro-2024-m4-14|24/512|standard glass silver|Odlično|new": {
   "p": 1979.99,
@@ -165,7 +169,7 @@
  },
  "ANOM|POHRANA|apple-macbook-air-m1-2020|8/512|spacegrey|Dobar|optimal": {
   "p": 524.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|POHRANA|apple-macbook-air-m1-2020|8/512|spacegrey|Odlično|new": {
   "p": 608.0,
@@ -189,7 +193,7 @@
  },
  "ANOM|POHRANA|apple-macbook-pro-2024-m4-14|16/1000|standard glass space black|Premium|optimal": {
   "p": 1724.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "ANOM|POHRANA|apple-macbook-pro-2024-m4-14|24/1000|standard glass silver|Odlično|new": {
   "p": 1718.0,
@@ -233,7 +237,7 @@
  },
  "OFF|apple-macbook-air-m2-2022|16/1000|midnight|Premium|US|optimal": {
   "p": 875.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m2-2022|16/1000|starlight|Odlično|US|new": {
   "p": 939.0,
@@ -253,31 +257,31 @@
  },
  "OFF|apple-macbook-air-m4-2025|16/256|midnight|Vrlo dobar|US|new": {
   "p": 1054.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/256|midnight|Vrlo dobar|US|optimal": {
   "p": 1031.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/256|skyblue|Premium|US|optimal": {
   "p": 1029.18,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/256|starlight|Premium|US|optimal": {
   "p": 1044.38,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/512|midnight|Dobar|US|new": {
   "p": 1025.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/512|midnight|Premium|US|new": {
   "p": 1070.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-air-m4-2025|16/512|skyblue|Premium|US|new": {
   "p": 1070.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/1000|spacegrey|Odlično|US|new": {
   "p": 1044.99,
@@ -297,11 +301,11 @@
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Dobar|US|new": {
   "p": 931.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Dobar|US|optimal": {
   "p": 717.94,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Odlično|US|new": {
   "p": 915.0,
@@ -309,11 +313,19 @@
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Odlično|US|optimal": {
   "p": 889.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-14|16/512|spacegrey|Vrlo dobar|US|optimal": {
   "p": 902.98,
   "t": "2026-06-17T13:34:34+00:00"
+ },
+ "OFF|apple-macbook-pro-2021-m1-14|32/512|silver|Dobar|US|new": {
+  "p": 1010.0,
+  "t": "2026-06-17T13:48:29+00:00"
+ },
+ "OFF|apple-macbook-pro-2021-m1-14|32/512|silver|Dobar|US|optimal": {
+  "p": 989.0,
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-16-2|16/1000|spacegrey|Dobar|US|optimal": {
   "p": 1039.99,
@@ -325,26 +337,30 @@
  },
  "OFF|apple-macbook-pro-2021-m1-16-2|16/512|spacegrey|Dobar|US|optimal": {
   "p": 792.18,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
+ },
+ "OFF|apple-macbook-pro-2021-m1-16-2|16/512|spacegrey|Vrlo dobar|US|new": {
+  "p": 1036.0,
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-16-2|16/512|spacegrey|Vrlo dobar|US|optimal": {
   "p": 990.17,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "OFF|apple-macbook-pro-2021-m1-16-2|32/512|silver|Odlično|US|optimal": {
   "p": 940.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "PATH|16/256": {
   "p": 604.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "PATH|16/512": {
   "p": 604.99,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  },
  "PATH|24/512": {
   "p": 940.0,
-  "t": "2026-06-17T13:34:34+00:00"
+  "t": "2026-06-17T13:48:29+00:00"
  }
 }
