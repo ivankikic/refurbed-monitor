@@ -95,6 +95,16 @@ ANOMALY_REQUIRE_AVAILABLE = True
 TOP_ABSOLUTE_DEALS = 8
 
 # --------------------------------------------------------------------------- #
+# Re-alert policy (so you're NEVER spammed with the same offer)
+# --------------------------------------------------------------------------- #
+# Dedup is per CONFIG (not per price). An already-seen config re-alerts ONLY if
+# its price drops by at least one of these vs the last price we alerted on. A
+# tiny price wiggle or a price increase never emails. A genuinely new config or
+# new anomaly always emails.
+REALERT_DROP_PCT = 3.0     # % price drop that counts as news
+REALERT_DROP_ABS = 20.0    # …or an absolute € drop, whichever triggers first
+
+# --------------------------------------------------------------------------- #
 # Ranking + AI  (the "don't make me read 54 lines" part)
 # --------------------------------------------------------------------------- #
 # How many ranked TOP picks to headline in the email.

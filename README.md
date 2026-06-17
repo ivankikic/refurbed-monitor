@@ -128,16 +128,17 @@ Local cron (if you do want it on an always-on machine you own) — `run.sh` load
 
 ## Dedup / state
 
-`seen.json` stores a signature per finding:
+`seen.json` tracks each finding by its **config identity** (not its price):
+`{"OFF|<product>|<ram>/<storage>|<colour>|<condition>|<kb>|<battery>": {"p": <price>, "t": <iso>}}`
+(plus `PATH|…` and `ANOM|…` keys).
 
-- `DEAL|<product>|<spec>|<price>`
-- `ANOM|<product>|…` (RAM/storage/battery anomaly identity)
-- `PATH|<product>|<spec>|<price>`
-
-Only signatures **not** already in `seen.json` trigger an email; everything seen
-this run is (re)stamped, and entries older than 30 days are pruned. So a price
-*change* re-alerts (new price → new signature), but a steady market stays quiet.
-Delete `seen.json` to reset.
+A config triggers an email only when it's **new** or its price **drops
+meaningfully** vs the price you were last alerted on — by ≥ `REALERT_DROP_PCT`
+(3%) or ≥ `REALERT_DROP_ABS` (20 €). A tiny price wiggle or a price *rise* never
+emails, so **you're never spammed with the same offer**; a genuine price drop
+does re-alert (that's good news). Sold-out configs are remembered so they don't
+re-alert at the same price when they return. Entries unused for 30 days are
+pruned. Delete `seen.json` to reset.
 
 ---
 

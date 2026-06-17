@@ -215,6 +215,32 @@ def _parse_chip(item_name: str) -> tuple[Optional[str], str]:
     return f"M{m.group(1)}", (m.group(2) or "")
 
 
+def parse_real_discount(html: str):
+    """The REAL original price + discount % (vs new), not the GA reference price.
+
+    refurbed renders, next to the price:  "529,00 €  1.129,00 €  (-53%)"
+    i.e. current · original (MSRP) · discount. The GA dataLayer "price" field is a
+    different, ~15%-inflated reference number (giving a misleading ~13% for
+    everything), so we read the real one from the price block here.
+
+    Returns (original_price | None, discount_pct | None).
+    """
+    for marker in ('data-test="bottom-bar-price"', "data-test-displayed-price"):
+        idx = html.find(marker)
+        if idx < 0:
+            continue
+        seg = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html[idx: idx + 260]))
+        prices = [parse_price_hr(p) for p in re.findall(r"[\d.]+,\d{2}\s*€", seg)]
+        prices = [p for p in prices if p]
+        mdisc = re.search(r"-\s*(\d{1,3})\s*%", seg)
+        if prices:
+            original = max(prices)
+            if mdisc:
+                return original, float(mdisc.group(1))
+            return original, None
+    return None, None
+
+
 def parse_availability(html: str) -> bool:
     """In stock iff the page renders the in-stock test hook.
 
@@ -336,6 +362,12 @@ def parse_variant_page(html: str, base: str, crawl_axes: Iterable[str],
         vp.price = float(m.group("price"))
         vp.spec = parse_item_variant(_json_unescape(m.group("variant")))
         vp.chip, vp.chip_tier = _parse_chip(vp.item_name)
+    # Replace the GA "price" (an inflated ~+15% reference that makes every offer
+    # look like ~13% off) with the REAL original price shown on the page, so the
+    # discount % is the genuine "vs new" saving (e.g. −63%).
+    if vp.price is not None:
+        original, _disc = parse_real_discount(html)
+        vp.list_price = original if (original and original > vp.price) else None
     vp.available = parse_availability(html)
     vp.battery = selected_battery(html)
     minst = re.search(r'data-instance-id="(\d+)"', html)

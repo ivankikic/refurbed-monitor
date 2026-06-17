@@ -42,50 +42,88 @@ def load_seen(path: str = STATE_PATH) -> dict:
 
 
 def save_seen(seen: dict, path: str = STATE_PATH) -> None:
-    # prune entries older than SEEN_TTL_DAYS
+    # prune entries older than SEEN_TTL_DAYS (values are {"p": price, "t": iso})
     now = datetime.now(timezone.utc)
     pruned = {}
-    for sig, iso in seen.items():
+    for key, rec in seen.items():
+        iso = rec.get("t") if isinstance(rec, dict) else None
         try:
-            age = (now - datetime.fromisoformat(iso)).days
+            age = (now - datetime.fromisoformat(iso)).days if iso else 0
         except (ValueError, TypeError):
             age = 0
-        if age <= SEEN_TTL_DAYS:
-            pruned[sig] = iso
+        if isinstance(rec, dict) and age <= SEEN_TTL_DAYS:
+            pruned[key] = rec
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(pruned, fh, ensure_ascii=False, indent=1, sort_keys=True)
 
 
 # --------------------------------------------------------------------------- #
-# Signatures
+# Dedup keys — CONFIG identity (NO price). Re-alert only on a real price drop.
 # --------------------------------------------------------------------------- #
-def _deal_sig(o: Offer) -> str:
-    return f"DEAL|{o.product}|{o.ram}/{o.storage}|{o.color}|{o.condition}|{o.price:.2f}"
+def offer_key(o: Offer) -> str:
+    return (f"OFF|{o.product}|{o.ram}/{o.storage}|{o.color}|{o.condition}"
+            f"|{o.keyboard}|{o.battery}")
 
 
-def _path_sig(spec: tuple, o: Offer) -> str:
-    return f"PATH|{o.product}|{spec[0]}/{spec[1]}|{o.color}|{o.condition}|{o.price:.2f}"
+def path_key(spec: tuple) -> str:
+    return f"PATH|{spec[0]}/{spec[1]}"
 
 
-def _pick_sig(o: Offer) -> str:
-    return f"PICK|{o.product}|{o.ram}/{o.storage}|{o.color}|{o.condition}|{o.price:.2f}"
+def anom_key(a) -> str:
+    u = a.upgrade
+    return (f"ANOM|{a.kind}|{a.product}|{u.ram}/{u.storage}|{u.color}"
+            f"|{u.condition}|{u.battery}")
 
 
-def current_signatures(report: Report) -> dict:
-    """All signatures present in this run, mapped to a short human label."""
-    sigs: dict[str, str] = {}
+def current_state(report: Report) -> dict:
+    """key -> {price, label} for everything worth alerting on this run.
+    Cheapest price wins per key."""
+    cur: dict[str, dict] = {}
+
+    def put(key: str, price: float, label: str):
+        if key not in cur or price < cur[key]["price"]:
+            cur[key] = {"price": price, "label": label}
+
     for o in report.picks:
-        sigs[_pick_sig(o)] = f"PICK {o.model} {o.spec_label} — {o.price:.2f} €"
+        put(offer_key(o), o.price, f"PICK {o.model} {o.spec_label} — {o.price:.2f} €")
     for o in report.deals:
-        sigs[_deal_sig(o)] = f"DEAL {o.model} {o.spec_label} — {o.price:.2f} €"
+        put(offer_key(o), o.price, f"DEAL {o.model} {o.spec_label} — {o.price:.2f} €")
     for spec, o in report.paths.items():
         if o is not None:
-            sigs[_path_sig(spec, o)] = (
-                f"PATH {spec[0]}/{spec[1]} → {o.model} {o.spec_label} — {o.price:.2f} €"
-            )
+            put(path_key(spec), o.price,
+                f"PATH {spec[0]}/{spec[1]} → {o.model} — {o.price:.2f} €")
     for a in report.anomalies:
-        sigs[a.signature] = f"ANOM {a.text}"
-    return sigs
+        put(anom_key(a), a.upgrade.price, f"ANOM {a.text}")
+    return cur
+
+
+def compute_alerts(current: dict, seen: dict) -> tuple:
+    """Return (alert_keys, new_seen). A key alerts if it's NEW or its price
+    dropped meaningfully vs the price we last alerted on; tiny wiggles and price
+    rises never alert (so you're not spammed with the same offer)."""
+    drop_pct = getattr(config, "REALERT_DROP_PCT", 3.0)
+    drop_abs = getattr(config, "REALERT_DROP_ABS", 20.0)
+    now = now_iso()
+    alerts: set = set()
+    new_seen: dict = {}
+    for key, info in current.items():
+        price = info["price"]
+        prev = seen.get(key)
+        prev_price = prev.get("p") if isinstance(prev, dict) else None
+        if prev_price is None:                       # brand-new config/anomaly
+            alerts.add(key)
+            new_seen[key] = {"p": price, "t": now}
+        elif price <= prev_price - max(drop_abs, prev_price * drop_pct / 100):
+            alerts.add(key)                          # genuine price drop
+            new_seen[key] = {"p": price, "t": now}
+        else:                                        # unchanged / wiggle / pricier
+            new_seen[key] = {"p": prev_price, "t": now}   # keep reference price
+    # carry over still-tracked configs not seen this run (e.g. temporarily sold
+    # out) so they don't re-alert at the same price when they return
+    for key, prev in seen.items():
+        if key not in new_seen and isinstance(prev, dict):
+            new_seen[key] = prev
+    return alerts, new_seen
 
 
 # --------------------------------------------------------------------------- #
@@ -124,9 +162,9 @@ def picks_for_email(report: Report, ai) -> list:
     return [(o, _deterministic_tier(o), None) for o in report.picks]
 
 
-def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
+def render_text(report: Report, alert_keys: set, ts: str, ai=None) -> str:
     L: list[str] = []
-    new_anoms = [a for a in report.anomalies if a.signature in new_sigs]
+    new_anoms = [a for a in report.anomalies if anom_key(a) in alert_keys]
     all_anoms = report.anomalies
     picks = picks_for_email(report, ai)
 
@@ -145,7 +183,7 @@ def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
     if picks:
         for o, tier, reason in picks:
             emoji = _TIER_EMOJI.get(tier, "•")
-            nov = "  🆕" if _pick_sig(o) in new_sigs or _deal_sig(o) in new_sigs else ""
+            nov = "  🆕" if offer_key(o) in alert_keys else ""
             disc = f" −{o.discount_pct:.0f}%" if o.discount_pct else ""
             L.append(f"  {emoji} {tier:<5} {o.price:>7.2f} €{disc}  {o.model} "
                      f"[{o.ram}/{o.storage} {o.color} {o.condition} {o.keyboard or '?'}]{nov}")
@@ -162,7 +200,7 @@ def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
     L.append("-" * 64)
     if all_anoms:
         for a in all_anoms[:12]:
-            tag = "NOVO " if a.signature in new_sigs else "     "
+            tag = "NOVO " if anom_key(a) in alert_keys else "     "
             L.append(f"  {tag}[{a.kind}] {a.text}")
             L.append(f"        ↳ {a.upgrade.url}")
         if len(all_anoms) > 12:
@@ -178,7 +216,7 @@ def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
              f"≥{config.GOOD_RAM}GB RAM / ≥{config.GOOD_STORAGE}GB:")
     if report.deals:
         for o in report.deals[: config.TOP_ABSOLUTE_DEALS]:
-            mark = "  ⭐NOVO" if _deal_sig(o) in new_sigs else ""
+            mark = "  ⭐NOVO" if offer_key(o) in alert_keys else ""
             L.append(_fmt_offer_line(o) + mark)
     else:
         L.append("  (nema ponuda pod stropom)")
@@ -190,7 +228,7 @@ def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
         if o is None:
             L.append(f"  • {label}: (nema dostupno)")
         else:
-            mark = "  ⭐NOVO" if _path_sig(spec, o) in new_sigs else ""
+            mark = "  ⭐NOVO" if path_key(spec) in alert_keys else ""
             got = f"{o.ram}/{o.storage}"
             extra = "  ⬆" if (o.ram > spec[0] or o.storage > spec[1]) else ""
             L.append(f"  • {label}: {o.price:.2f} € — {o.model} "
@@ -208,20 +246,20 @@ def render_text(report: Report, new_sigs: set, ts: str, ai=None) -> str:
     L.append("")
     L.append(f"  Ukupno: {len(report.offers)} configa "
              f"({total_av} dostupnih) • {len(all_anoms)} anomalija • "
-             f"{len(new_sigs)} novih signala")
+             f"{len(alert_keys)} novih/jeftinijih")
     L.append("=" * 64)
     return "\n".join(L)
 
 
-def subject_line(report: Report, new_sigs: set, ai=None) -> str:
+def subject_line(report: Report, alert_keys: set, ai=None) -> str:
     if ai is not None and ai.subject:
         return ai.subject
     top = report.picks[0] if report.picks else None
     if top is not None:
         disc = f", −{top.discount_pct:.0f}%" if top.discount_pct else ""
-        return (f"🟢 Refurbed: {len(new_sigs)} novih • top {top.price:.0f}€{disc} "
+        return (f"🟢 Refurbed: {len(alert_keys)} novih • top {top.price:.0f}€{disc} "
                 f"{top.model}")
-    return f"🟢 Refurbed: {len(new_sigs)} novih"
+    return f"🟢 Refurbed: {len(alert_keys)} novih"
 
 
 # --------------------------------------------------------------------------- #

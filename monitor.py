@@ -80,25 +80,25 @@ def main(argv=None) -> int:
                       ensure_ascii=False, indent=1)
         print(f"Wrote {len(report.offers)} offers -> {args.offers_json}")
 
-    # 3. dedup vs seen.json ------------------------------------------------- #
+    # 3. dedup vs seen.json (config-based; re-alert only on a real price drop) -- #
     seen = {} if args.no_state else notify.load_seen()
-    sigs = notify.current_signatures(report)
-    new_sigs = {s for s in sigs if s not in seen}
+    current = notify.current_state(report)
+    alert_keys, new_seen = notify.compute_alerts(current, seen)
 
     # 3b. AI ranking + email composition (optional; falls back gracefully) ---- #
     ai_result = None if args.no_ai else ai.rank(report)
 
     ts = notify.now_iso()
-    body = notify.render_text(report, new_sigs, ts, ai_result)
-    subject = notify.subject_line(report, new_sigs, ai_result)
+    body = notify.render_text(report, alert_keys, ts, ai_result)
+    subject = notify.subject_line(report, alert_keys, ai_result)
 
     print()
     print(body)
     print()
 
     # 4. alert if there is news -------------------------------------------- #
-    if new_sigs:
-        print(f">> {len(new_sigs)} NEW signal(s): {subject}")
+    if alert_keys:
+        print(f">> {len(alert_keys)} NEW/cheaper: {subject}")
         if args.dry_run:
             print("   (--dry-run: not sending)")
         else:
@@ -108,15 +108,12 @@ def main(argv=None) -> int:
                 print("   (email not sent; state still updated so you won't be "
                       "re-spammed — use --no-state while testing)")
     else:
-        print(">> No new signals — no email sent (this is the no-change case).")
+        print(">> Nothing new or cheaper — no email (this is the no-change case).")
 
     # 5. persist state ------------------------------------------------------ #
     if not args.no_state:
-        now = notify.now_iso()
-        for s in sigs:
-            seen[s] = now
-        notify.save_seen(seen)
-        print(f"   state: {len(seen)} signatures tracked in seen.json")
+        notify.save_seen(new_seen)
+        print(f"   state: {len(new_seen)} configs tracked in seen.json")
 
     return 0
 
