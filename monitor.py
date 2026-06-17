@@ -85,8 +85,13 @@ def main(argv=None) -> int:
     current = notify.current_state(report)
     alert_keys, new_seen = notify.compute_alerts(current, seen)
 
-    # 3b. AI ranking + email composition (optional; falls back gracefully) ---- #
-    ai_result = None if args.no_ai else ai.rank(report)
+    # 3b. AI ranking — ONLY when there's news to email. The AI output is used
+    #     only in the email, and the email only sends when alert_keys is
+    #     non-empty, so calling Gemini on quiet runs would just burn API credit.
+    #     Quiet 15-min scans (the vast majority) therefore cost €0.
+    ai_result = None
+    if alert_keys and not args.no_ai:
+        ai_result = ai.rank(report)
 
     ts = notify.now_iso()
     body = notify.render_text(report, alert_keys, ts, ai_result)
