@@ -9,10 +9,13 @@ read 50 lines. Ranking is done by **Gemini AI** (with a deterministic fallback),
 factoring in the **% discount** vs list price (the "−63%" bagatela signal),
 absolute price vs budget, and spec. Below that it still reports:
 
-1. **Absolute deals** — cheapest *available* offers ≥16 GB / ≥256 GB under the ceiling.
-2. **Marginal anomalies** — near-free one-axis upgrades: *24 GB for +5 €*,
+1. **Below typical price** ("ispod prosjeka") — it learns the *typical* price of
+   each `(model, RAM, storage)` config over time and flags offers priced well
+   below it, plus **all-time lows** (e.g. an M4 Air 24/512 usually ~1350 € that
+   shows up at ~1000 €). This is the headline signal.
+2. **Absolute deals** — cheapest *available* offers ≥16 GB / ≥256 GB under the ceiling.
+3. **Marginal anomalies** — near-free one-axis upgrades: *24 GB for +5 €*,
    *512 GB for +30 €*, *new battery for +20 €*.
-3. **Cheapest-path-to-spec** — cheapest way to reach 16/256, 16/512, 24/512.
 
 Tuned to the owner: **≤ 1100 €**, **≥16 GB / ≥256 GB**, **US or HR keyboard only**
 (whichever is cheaper), Apple Silicon only. **Intel Macs are always excluded.**
@@ -98,6 +101,8 @@ change sends nothing (it just logs) — see *Dedup* below.
 | `GOOD_RAM` / `GOOD_STORAGE` | 16 / 256 | "good enough" spec |
 | `KEYBOARD_FILTER` | `["US","HR"]` | accepted layouts (cheapest of these wins); `None` = any |
 | `DREAM_DISCOUNT_PCT` | 40 | flag as STEAL if ≥ this % off list |
+| `UNDERPRICED_PCT` | 12 | flag if ≥ this % below the config's *typical* price |
+| `BASELINE_WINDOW` / `BASELINE_MIN_SAMPLES` | 60 / 4 | baseline rolling window / warm-up |
 | `MARGINAL_RAM/STORAGE/BATTERY_MAX` | 40/60/35 | near-free upgrade caps (€) |
 | `TARGET_SPECS` | (16,256),(16,512),(24,512) | cheapest-path targets |
 | `REQUIRE_SILICON` | True | exclude Intel |

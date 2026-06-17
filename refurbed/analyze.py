@@ -38,6 +38,10 @@ class Offer:
     url: str
     variant_id: Optional[str] = None
     offer_id: Optional[str] = None
+    # filled in by baselines.annotate() — "how this price compares to typical"
+    baseline_median: Optional[float] = None
+    vs_baseline_pct: float = 0.0      # % below the config's typical price
+    all_time_low: bool = False
 
     # convenience -----------------------------------------------------------
     @property
@@ -98,6 +102,10 @@ def value_score(o: Offer) -> float:
     score += _CHIP_GEN.get(o.chip or "", 0) * 2              # newer chip (mild)
     if o.battery == "new":
         score += 2
+    # below-typical price is the strongest "grab it" signal we have
+    score += o.vs_baseline_pct * 1.5
+    if o.all_time_low:
+        score += 12
     return round(score, 2)
 
 
@@ -282,16 +290,24 @@ class Report:
     deals: list[Offer]
     paths: dict                       # (ram,storage) -> Offer | None
     anomalies: list[Anomaly]
-    picks: list[Offer] = field(default_factory=list)   # ranked top buys
+    picks: list[Offer] = field(default_factory=list)        # ranked top buys
+    underpriced: list[Offer] = field(default_factory=list)  # below typical price
     summaries: list[ProductSummary] = field(default_factory=list)
 
 
-def build_report(offers: list[Offer]) -> Report:
+def build_report(offers: list[Offer], baselines: dict | None = None) -> Report:
     offers = keyboard_filtered(silicon_only(offers))
+    if baselines is not None:
+        from . import baselines as _bl       # local import avoids a cycle
+        _bl.annotate(offers, baselines)       # must run BEFORE ranking
     deals = absolute_deals(offers)
     paths = {spec: cheapest_path(offers, *spec) for spec in config.TARGET_SPECS}
     anomalies = marginal_anomalies(offers)
     picks = top_picks(offers)
+    underpriced = []
+    if baselines is not None:
+        from . import baselines as _bl
+        underpriced = _bl.underpriced(offers)
 
     by_product: dict = {}
     for o in offers:
@@ -315,4 +331,4 @@ def build_report(offers: list[Offer]) -> Report:
             anomaly_count=anom_by_product.get(product, 0),
         ))
 
-    return Report(offers, deals, paths, anomalies, picks, summaries)
+    return Report(offers, deals, paths, anomalies, picks, underpriced, summaries)

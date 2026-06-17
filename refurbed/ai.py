@@ -64,9 +64,14 @@ vrijedi kupiti ODMAH. Vrati JSON:
 - "picks": poredano od najbolje, max {n} komada, svaki {{"i": indeks, \
 "tier": STEAL|GREAT|GOOD, "reason": jedna kratka hrvatska rečenica zašto}}.
 
+NAJVAŽNIJI signal: "vs_typical_pct" = koliko je cijena ISPOD tipične cijene za TU \
+konfiguraciju (koju smo izmjerili kroz vrijeme). Veliki vs_typical_pct ili \
+"all_time_low": true = upravo ono što kupac lovi (npr. M4 Air 24/512 inače ~1350€, \
+sad ~1000€). To je jači signal od običnog popusta od liste.
+
 Tieri (budi strog, ne napuhuj):
-- STEAL = samo iznimno: popust ≳35% OD liste ILI dramatično niska cijena za spec
-  (npr. M4 Air ~1000€ umjesto ~1730€). Ako je popust ~10-15%, to NIJE steal.
+- STEAL = samo iznimno: znatno ispod tipične cijene (vs_typical_pct ≳15%) ILI \
+  all_time_low, ILI popust ≳35% od liste. Ako je tek ~10% jeftinije, NIJE steal.
 - GREAT = vrlo dobra ponuda (dobar omjer cijene i specifikacija, solidan popust).
 - GOOD = u redu ponuda vrijedna spomena.
 
@@ -103,6 +108,9 @@ def _candidate_dict(o: Offer, i: int, tags: list[str]) -> dict:
         "price_eur": round(o.price, 2),
         "list_price_eur": round(o.list_price, 2) if o.list_price else None,
         "discount_pct": o.discount_pct,
+        "typical_price_eur": round(o.baseline_median, 2) if o.baseline_median else None,
+        "vs_typical_pct": o.vs_baseline_pct,     # % below the usual price for this config
+        "all_time_low": o.all_time_low,
         "tags": tags,
         "available": o.available,
     }

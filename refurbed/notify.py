@@ -132,6 +132,18 @@ def _wrap(text: str, width: int = 64) -> str:
     return "\n".join(textwrap.wrap(text, width)) or text
 
 
+def _baseline_note(o: Offer) -> str:
+    """' ↘ inače ~1350€ (−26%) · 🏆 najniža dosad' when we have a baseline."""
+    if not o.baseline_median:
+        return ""
+    parts = []
+    if o.vs_baseline_pct >= 1:
+        parts.append(f"inače ~{o.baseline_median:.0f}€ (−{o.vs_baseline_pct:.0f}%)")
+    if o.all_time_low:
+        parts.append("🏆 najniža dosad")
+    return " · ".join(parts)
+
+
 def _fmt_offer_line(o: Offer) -> str:
     av = "" if o.available else "  (RASPRODANO)"
     kb = f" {o.keyboard}" if o.keyboard else ""
@@ -187,9 +199,28 @@ def render_text(report: Report, alert_keys: set, ts: str, ai=None) -> str:
                      f"[{o.ram}/{o.storage} {o.color} {o.condition} {o.keyboard or '?'}]{nov}")
             if reason:
                 L.append(f"        „{reason}”")
+            note = _baseline_note(o)
+            if note:
+                L.append(f"        ↘ {note}")
             L.append(f"        {o.url}")
     else:
         L.append("  (nema ponude koja zadovoljava budžet + specifikacije)")
+
+    # ---- ISPOD PROSJEKA --------------------------------------------------- #
+    L.append("")
+    L.append("🎯 ISPOD PROSJEKA — jeftinije nego inače za tu konfiguraciju")
+    L.append("-" * 64)
+    if report.underpriced:
+        for o in report.underpriced[:8]:
+            atl = " 🏆" if o.all_time_low else ""
+            mark = "  ⭐NOVO" if offer_key(o) in alert_keys else ""
+            L.append(f"  • {o.price:.0f} € (inače ~{o.baseline_median:.0f} €, "
+                     f"−{o.vs_baseline_pct:.0f}%){atl}  {o.model} "
+                     f"[{o.ram}/{o.storage} {o.color} {o.condition} "
+                     f"{o.keyboard or '?'}]{mark}")
+            L.append(f"      {o.url}")
+    else:
+        L.append("  (još skupljam prosjeke — bit će bogatije za koji dan)")
 
     # ---- ANOMALIJE -------------------------------------------------------- #
     L.append("")
@@ -218,20 +249,6 @@ def render_text(report: Report, alert_keys: set, ts: str, ai=None) -> str:
             L.append(_fmt_offer_line(o) + mark)
     else:
         L.append("  (nema ponuda pod stropom)")
-
-    L.append("")
-    L.append("  Najjeftiniji put do ciljanih specifikacija:")
-    for spec, o in report.paths.items():
-        label = f"{spec[0]}GB / {spec[1]}GB"
-        if o is None:
-            L.append(f"  • {label}: (nema dostupno)")
-        else:
-            mark = "  ⭐NOVO" if path_key(spec) in alert_keys else ""
-            got = f"{o.ram}/{o.storage}"
-            extra = "  ⬆" if (o.ram > spec[0] or o.storage > spec[1]) else ""
-            L.append(f"  • {label}: {o.price:.2f} € — {o.model} "
-                     f"[{got} {o.color} {o.condition}{extra}]{mark}")
-            L.append(f"      {o.url}")
 
     # ---- SAŽETAK ---------------------------------------------------------- #
     L.append("")
@@ -273,6 +290,15 @@ def _anom_gain(a) -> str:
     return a.kind
 
 
+def _vs_typical_html(o: Offer) -> str:
+    if not o.baseline_median or o.vs_baseline_pct < 1:
+        return "🏆" if o.all_time_low else "—"
+    atl = "&nbsp;🏆" if o.all_time_low else ""
+    return (f'<span style="color:#e8500e;font-weight:700" '
+            f'title="inače ~{o.baseline_median:.0f} €">'
+            f'−{o.vs_baseline_pct:.0f}%{atl}</span>')
+
+
 def _th(cells: list[str]) -> str:
     return ('<tr style="background:#f5f5f7;text-align:left;color:#555">'
             + "".join(f'<th style="padding:7px 9px;font-weight:600">{c}</th>'
@@ -303,8 +329,8 @@ def render_html(report: Report, alert_keys: set, ts: str, ai=None) -> str:
               f'</span></h2>')
     if picks:
         o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
-        o_.append(_th(["#", "Tier", "Cijena", "Popust", "Model", "RAM/SSD",
-                       "Stanje", "Tipk.", "Bat.", "Zašto", ""]))
+        o_.append(_th(["#", "Tier", "Cijena", "Popust", "vs tip.", "Model",
+                       "RAM/SSD", "Stanje", "Tipk.", "Bat.", "Zašto", ""]))
         for i, (o, tier, reason) in enumerate(picks, 1):
             fg, bg, emoji = _TIER_HTML.get(tier, ("#333", "#e3e3e8", "•"))
             new = offer_key(o) in alert_keys
@@ -323,6 +349,7 @@ def render_html(report: Report, alert_keys: set, ts: str, ai=None) -> str:
                 _cell(badge),
                 _cell(f'<b style="font-size:14px">{o.price:.0f}&nbsp;€</b>'),
                 _cell(disc),
+                _cell(_vs_typical_html(o)),
                 _cell(_esc(o.model)),
                 _cell(f'{o.ram}/{o.storage}'),
                 _cell(_esc(o.condition)),
@@ -366,25 +393,31 @@ def render_html(report: Report, alert_keys: set, ts: str, ai=None) -> str:
             o_.append(f'<tr style="{rowbg}">' + "".join(cells) + "</tr>")
         o_.append("</table>")
 
-    # ----- Cheapest-path mini table ---------------------------------------- #
-    rows = [(spec, o) for spec, o in report.paths.items() if o is not None]
-    if rows:
-        o_.append('<h3 style="margin:22px 0 8px;font-size:16px">🎯 Najjeftiniji '
-                  'put do specifikacije</h3>')
+    # ----- Ispod prosjeka table -------------------------------------------- #
+    if report.underpriced:
+        o_.append('<h3 style="margin:22px 0 8px;font-size:16px">🎯 Ispod prosjeka '
+                  '<span style="font-weight:400;font-size:12px;color:#999">'
+                  '(jeftinije nego inače za tu konfiguraciju)</span></h3>')
         o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
-        o_.append(_th(["Cilj", "Dobiješ", "Cijena", "Model", ""]))
-        for spec, o in rows:
-            up = " ⬆" if (o.ram > spec[0] or o.storage > spec[1]) else ""
+        o_.append(_th(["Cijena", "Inače", "Razlika", "Model", "RAM/SSD",
+                       "Stanje", ""]))
+        for o in report.underpriced[:10]:
+            new = offer_key(o) in alert_keys
+            rowbg = "background:#fffbe6;" if new else ""
+            atl = "&nbsp;🏆" if o.all_time_low else ""
             buy = (f'<a href="{_esc(o.url)}" style="color:#5b51d8;'
                    f'text-decoration:none;font-weight:600">otvori&nbsp;›</a>')
             cells = [
-                _cell(f"≥{spec[0]}/{spec[1]}"),
-                _cell(f"{o.ram}/{o.storage}{up}"),
-                _cell(f'<b>{o.price:.0f}&nbsp;€</b>'),
-                _cell(_esc(f"{o.model} · {o.color} · {o.condition}")),
+                _cell(f'<b style="font-size:14px">{o.price:.0f}&nbsp;€</b>{atl}'),
+                _cell(f'<span style="color:#999">~{o.baseline_median:.0f}&nbsp;€</span>'),
+                _cell(f'<span style="color:#e8500e;font-weight:700">'
+                      f'−{o.vs_baseline_pct:.0f}%</span>'),
+                _cell(_esc(o.model)),
+                _cell(f'{o.ram}/{o.storage}'),
+                _cell(_esc(o.condition)),
                 _cell(buy),
             ]
-            o_.append("<tr>" + "".join(cells) + "</tr>")
+            o_.append(f'<tr style="{rowbg}">' + "".join(cells) + "</tr>")
         o_.append("</table>")
 
     total_av = sum(1 for o in report.offers if o.available)

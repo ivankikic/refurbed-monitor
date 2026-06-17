@@ -31,6 +31,17 @@ MARGINAL_BATTERY_MAX = 35.0   # Optimalna -> Nova for <= 35 EUR
 # Cheapest-path-to-spec targets: (ram, storage)
 TARGET_SPECS = [(16, 256), (16, 512), (24, 512)]
 
+# --------------------------------------------------------------------------- #
+# Price baselines — "this config is cheaper than usual" detection
+# --------------------------------------------------------------------------- #
+# We record the cheapest available price per (model, RAM, storage) on every FULL
+# run and keep a rolling window, so we learn the TYPICAL price of each config.
+# An offer priced well below that typical is the gold (e.g. M4 Air 24/512 that's
+# usually ~1350 € showing up at ~1000 €).
+BASELINE_WINDOW = 60        # samples kept per config (full runs ~4/day → ~2 wks)
+BASELINE_MIN_SAMPLES = 4    # need this many before a baseline is trusted
+UNDERPRICED_PCT = 12.0      # flag an offer >= this % below its config's typical
+
 # Hard rule: Apple Silicon only. Intel Macs are excluded no matter how cheap.
 REQUIRE_SILICON = True
 

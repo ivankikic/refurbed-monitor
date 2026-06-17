@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-from refurbed import ai, analyze, config, crawl, notify
+from refurbed import ai, analyze, baselines, config, crawl, notify
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -67,8 +67,15 @@ def main(argv=None) -> int:
         print("No offers collected — aborting (site change or network issue?).")
         return 2
 
-    # 2. analyse (silicon filter applied inside build_report) --------------- #
-    report = analyze.build_report(offers)
+    # 2. analyse (silicon + US/HR filters + baseline annotation inside) ------ #
+    bl = baselines.load()
+    report = analyze.build_report(offers, bl)
+    # Learn typical prices from FULL runs only (they crawl the whole matrix);
+    # light runs just read the baselines to flag below-typical steals.
+    if args.mode == "full" and not args.no_state:
+        baselines.update(bl, report.offers)
+        baselines.save(bl)
+        print(f"   baselines: {len(bl)} configs tracked in baselines.json")
     excluded = len(offers) - len(report.offers)
     if excluded:
         kb = config.KEYBOARD_FILTER or "any"
