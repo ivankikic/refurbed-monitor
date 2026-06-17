@@ -195,7 +195,14 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
             keyboard_filter=config.KEYBOARD_FILTER,
         )
         s = vp.spec
-        if vp.found and vp.price is not None:
+        # Foreign-keyboard pages are entry points only: bridge to US/HR via the
+        # keyboard axis but don't explore their (foreign) siblings. This prunes
+        # the ~half of the matrix that's filtered out anyway, so the cap covers
+        # the US/HR region. (8 GB stays explored — relevance is filtered later.)
+        kb_allowed = {k.upper() for k in (config.KEYBOARD_FILTER or [])}
+        kb = (s.keyboard or "").upper()
+        off_layout = bool(kb_allowed) and bool(kb) and kb not in kb_allowed
+        if vp.found and vp.price is not None and not off_layout:
             var_id, offer_id = _ids_from_url(url)
             if s.ram is not None and s.storage is not None:
                 key = _dedup_key(vp)
@@ -223,9 +230,14 @@ def crawl_product(slug: str, fetcher: Fetcher, *, verbose: bool = True) -> list[
                         offer_id=offer_id,
                     )
 
-        # explore all 1-axis neighbours (targeting already pruned 8GB/1TB/2TB and
-        # non-US/HR); FIFO keeps coverage even across 8 GB entry points
-        for n in vp.neighbors:
+        # from a foreign-layout page, only follow the keyboard axis (bridge to
+        # US/HR); otherwise explore all 1-axis neighbours within US/HR
+        if off_layout:
+            nbrs = parse.crawl_neighbors(page_html, ["Raspored tipki"], base,
+                                         keyboard_filter=config.KEYBOARD_FILTER)
+        else:
+            nbrs = vp.neighbors
+        for n in nbrs:
             enqueue(n)
 
     truncated = bool(queue) and fetches >= config.MAX_FETCHES_PER_PRODUCT
