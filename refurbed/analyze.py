@@ -123,10 +123,9 @@ def top_picks(offers: list[Offer], n: int | None = None) -> list[Offer]:
     cands = [
         o for o in offers
         if o.available and o.price <= config.CEILING
-        and (
-            (o.ram >= config.GOOD_RAM and o.storage >= config.GOOD_STORAGE)
-            or o.discount_pct >= dream
-        )
+        and o.ram >= config.GOOD_RAM             # hard floor: owner needs ≥16 GB
+        # a "dream discount" can excuse low storage, but never low RAM
+        and (o.storage >= config.GOOD_STORAGE or o.discount_pct >= dream)
     ]
     cands = collapse_by_config(cands)        # one listing per identical machine
     cands.sort(key=value_score, reverse=True)
