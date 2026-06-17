@@ -1,21 +1,19 @@
 """
-State (seen.json dedup) + alert rendering + delivery (SMTP / Telegram).
+State (seen.json dedup) + alert rendering (plain text + HTML table) + delivery.
 
-Signatures (brief §7):
-  DEAL|<product>|<spec>|<price>
-  ANOM|<product>|...        (Anomaly.signature)
-  PATH|<product>|<spec>|<price>
-
-Only NEW signatures trigger an email. A run with no new signatures sends nothing
-(it just logs), satisfying "a second run with no market change sends no email".
+Dedup is per CONFIG identity (no price). A config alerts only when NEW or when
+its price drops meaningfully — see compute_alerts(). The email is sent as
+multipart: an HTML comparison table (what Gmail shows) + a plain-text fallback.
 """
 from __future__ import annotations
 
+import html as ihtml
 import json
 import os
 import smtplib
 import ssl
 from datetime import datetime, timezone
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
@@ -251,6 +249,153 @@ def render_text(report: Report, alert_keys: set, ts: str, ai=None) -> str:
     return "\n".join(L)
 
 
+# --------------------------------------------------------------------------- #
+# HTML rendering — a comparison table (what Gmail shows)
+# --------------------------------------------------------------------------- #
+_TIER_HTML = {
+    "STEAL": ("#ffffff", "#e8500e", "🔥"),
+    "GREAT": ("#ffffff", "#1a8f3c", "🟢"),
+    "GOOD": ("#333333", "#e3e3e8", "⚪"),
+}
+
+
+def _esc(x) -> str:
+    return ihtml.escape(str(x if x is not None else ""))
+
+
+def _anom_gain(a) -> str:
+    if a.kind == "RAM":
+        return f"{a.base.ram}→{a.upgrade.ram} GB RAM"
+    if a.kind == "POHRANA":
+        return f"{a.base.storage}→{a.upgrade.storage} GB pohrane"
+    if a.kind == "BATERIJA":
+        return "Optimalna→Nova baterija"
+    return a.kind
+
+
+def _th(cells: list[str]) -> str:
+    return ('<tr style="background:#f5f5f7;text-align:left;color:#555">'
+            + "".join(f'<th style="padding:7px 9px;font-weight:600">{c}</th>'
+                      for c in cells) + "</tr>")
+
+
+def _cell(content, extra="") -> str:
+    return (f'<td style="padding:7px 9px;border-bottom:1px solid #eee;'
+            f'vertical-align:middle;{extra}">{content}</td>')
+
+
+def render_html(report: Report, alert_keys: set, ts: str, ai=None) -> str:
+    picks = picks_for_email(report, ai)
+    o_: list[str] = []
+    o_.append('<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+              'Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;max-width:880px;'
+              'margin:0 auto">')
+    o_.append(f'<div style="color:#999;font-size:12px;margin-bottom:4px">refurbed '
+              f'monitor · {_esc(ts)}</div>')
+    if ai is not None and ai.summary:
+        o_.append(f'<p style="font-size:15px;line-height:1.55;margin:6px 0 14px">'
+                  f'{_esc(ai.summary)}</p>')
+
+    # ----- TOP PONUDE table ------------------------------------------------ #
+    src = "AI rangirano" if (ai and ai.picks) else "rangirano po vrijednosti"
+    o_.append(f'<h2 style="margin:14px 0 8px;font-size:18px">⭐ TOP ponude '
+              f'<span style="font-weight:400;font-size:13px;color:#999">({src})'
+              f'</span></h2>')
+    if picks:
+        o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
+        o_.append(_th(["#", "Tier", "Cijena", "Popust", "Model", "RAM/SSD",
+                       "Stanje", "Tipk.", "Bat.", "Zašto", ""]))
+        for i, (o, tier, reason) in enumerate(picks, 1):
+            fg, bg, emoji = _TIER_HTML.get(tier, ("#333", "#e3e3e8", "•"))
+            new = offer_key(o) in alert_keys
+            rowbg = "background:#fffbe6;" if new else ""
+            badge = (f'<span style="background:{bg};color:{fg};padding:2px 8px;'
+                     f'border-radius:11px;font-size:11px;font-weight:700;'
+                     f'white-space:nowrap">{emoji} {tier}</span>')
+            disc = (f'<span style="color:#1a8f3c;font-weight:700">'
+                    f'−{o.discount_pct:.0f}%</span>' if o.discount_pct else "—")
+            batt = "Nova" if o.battery == "new" else "Opt."
+            buy = (f'<a href="{_esc(o.url)}" style="color:#fff;background:#5b51d8;'
+                   f'padding:5px 11px;border-radius:6px;text-decoration:none;'
+                   f'white-space:nowrap;font-weight:600">Kupi&nbsp;›</a>')
+            cells = [
+                _cell(f'{i}{"&nbsp;🆕" if new else ""}'),
+                _cell(badge),
+                _cell(f'<b style="font-size:14px">{o.price:.0f}&nbsp;€</b>'),
+                _cell(disc),
+                _cell(_esc(o.model)),
+                _cell(f'{o.ram}/{o.storage}'),
+                _cell(_esc(o.condition)),
+                _cell(_esc(o.keyboard or "?")),
+                _cell(batt),
+                _cell(f'<span style="color:#555">{_esc(reason)}</span>'
+                      if reason else "—"),
+                _cell(buy),
+            ]
+            o_.append(f'<tr style="{rowbg}">' + "".join(cells) + "</tr>")
+        o_.append("</table>")
+    else:
+        o_.append('<p style="color:#999">Nema ponude koja zadovoljava budžet + '
+                  'specifikacije.</p>')
+
+    # ----- Anomalije table ------------------------------------------------- #
+    if report.anomalies:
+        new_n = sum(1 for a in report.anomalies if anom_key(a) in alert_keys)
+        o_.append(f'<h3 style="margin:22px 0 8px;font-size:16px">🔧 Anomalije '
+                  f'<span style="font-weight:400;font-size:12px;color:#999">'
+                  f'(skoro besplatni upgradei · {len(report.anomalies)} ukupno, '
+                  f'{new_n} novih)</span></h3>')
+        o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
+        o_.append(_th(["Što dobiješ", "Stroj", "Trošak", "Cijena", ""]))
+        for a in report.anomalies[:14]:
+            u = a.upgrade
+            new = anom_key(a) in alert_keys
+            rowbg = "background:#fffbe6;" if new else ""
+            color = "#1a8f3c" if a.delta <= 0 else "#1a1a1a"
+            cost = (f'<span style="color:{color};font-weight:700">'
+                    f'{a.delta:+.0f}&nbsp;€</span>')
+            buy = (f'<a href="{_esc(u.url)}" style="color:#5b51d8;'
+                   f'text-decoration:none;font-weight:600">otvori&nbsp;›</a>')
+            cells = [
+                _cell(f'{"🆕&nbsp;" if new else ""}<b>{_esc(_anom_gain(a))}</b>'),
+                _cell(_esc(f"{u.model} · {u.color} · {u.condition} · {u.keyboard or '?'}")),
+                _cell(cost),
+                _cell(f'{u.price:.0f}&nbsp;€'),
+                _cell(buy),
+            ]
+            o_.append(f'<tr style="{rowbg}">' + "".join(cells) + "</tr>")
+        o_.append("</table>")
+
+    # ----- Cheapest-path mini table ---------------------------------------- #
+    rows = [(spec, o) for spec, o in report.paths.items() if o is not None]
+    if rows:
+        o_.append('<h3 style="margin:22px 0 8px;font-size:16px">🎯 Najjeftiniji '
+                  'put do specifikacije</h3>')
+        o_.append('<table style="border-collapse:collapse;width:100%;font-size:13px">')
+        o_.append(_th(["Cilj", "Dobiješ", "Cijena", "Model", ""]))
+        for spec, o in rows:
+            up = " ⬆" if (o.ram > spec[0] or o.storage > spec[1]) else ""
+            buy = (f'<a href="{_esc(o.url)}" style="color:#5b51d8;'
+                   f'text-decoration:none;font-weight:600">otvori&nbsp;›</a>')
+            cells = [
+                _cell(f"≥{spec[0]}/{spec[1]}"),
+                _cell(f"{o.ram}/{o.storage}{up}"),
+                _cell(f'<b>{o.price:.0f}&nbsp;€</b>'),
+                _cell(_esc(f"{o.model} · {o.color} · {o.condition}")),
+                _cell(buy),
+            ]
+            o_.append("<tr>" + "".join(cells) + "</tr>")
+        o_.append("</table>")
+
+    total_av = sum(1 for o in report.offers if o.available)
+    o_.append(f'<p style="color:#999;font-size:12px;margin-top:18px">'
+              f'{len(report.offers)} konfiguracija ({total_av} dostupnih) · '
+              f'{len(report.anomalies)} anomalija · {len(alert_keys)} novih/jeftinijih '
+              f'· US/HR tipkovnica · ≤ {config.CEILING:.0f} €</p>')
+    o_.append("</div>")
+    return "\n".join(o_)
+
+
 def subject_line(report: Report, alert_keys: set, ai=None) -> str:
     if ai is not None and ai.subject:
         return ai.subject
@@ -276,13 +421,18 @@ def _smtp_config() -> Optional[tuple]:
     return None
 
 
-def send_email(subject: str, body: str) -> bool:
+def send_email(subject: str, body: str, html_body: Optional[str] = None) -> bool:
     cfg = _smtp_config()
     if not cfg:
         print("  [email] SMTP_USER/SMTP_PASS/ALERT_TO not set — skipping send.")
         return False
     host, port, user, pwd, to = cfg
-    msg = MIMEText(body, "plain", "utf-8")
+    if html_body:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(body, "plain", "utf-8"))        # fallback first
+        msg.attach(MIMEText(html_body, "html", "utf-8"))    # preferred
+    else:
+        msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = subject
     msg["From"] = user
     msg["To"] = to

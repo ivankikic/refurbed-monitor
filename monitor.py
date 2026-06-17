@@ -90,6 +90,7 @@ def main(argv=None) -> int:
 
     ts = notify.now_iso()
     body = notify.render_text(report, alert_keys, ts, ai_result)
+    html_body = notify.render_html(report, alert_keys, ts, ai_result)
     subject = notify.subject_line(report, alert_keys, ai_result)
 
     print()
@@ -97,12 +98,17 @@ def main(argv=None) -> int:
     print()
 
     # 4. alert if there is news -------------------------------------------- #
+    if args.dry_run:
+        with open("last_email.html", "w", encoding="utf-8") as fh:
+            fh.write(html_body)
+        print("   (--dry-run: HTML preview written to last_email.html)")
+
     if alert_keys:
         print(f">> {len(alert_keys)} NEW/cheaper: {subject}")
         if args.dry_run:
             print("   (--dry-run: not sending)")
         else:
-            sent = notify.send_email(subject, body)
+            sent = notify.send_email(subject, body, html_body)
             notify.send_telegram(subject, body)
             if not sent:
                 print("   (email not sent; state still updated so you won't be "

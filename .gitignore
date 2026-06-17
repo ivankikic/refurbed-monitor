@@ -14,3 +14,6 @@ __pycache__/
 
 # raw investigation scratch (evidence; regenerable, large)
 _investigation/
+
+# dry-run HTML preview
+last_email.html

@@ -184,7 +184,9 @@ def rank(report: Report, *, verbose: bool = True) -> Optional[AIResult]:
     try:
         parts = data["candidates"][0]["content"]["parts"]
         text = "".join(p.get("text", "") for p in parts)  # JSON may span parts
-        parsed = json.loads(text)
+        parsed = _loads_tolerant(text)
+        if parsed is None:
+            raise ValueError("unparseable JSON")
         picks = []
         for p in parsed.get("picks", []):
             idx = p.get("i")
@@ -200,6 +202,38 @@ def rank(report: Report, *, verbose: bool = True) -> Optional[AIResult]:
         if verbose:
             print(f"  [ai] could not parse Gemini response ({exc}) — fallback.")
         return None
+
+
+def _loads_tolerant(text: str):
+    """json.loads, but salvage common model glitches (trailing commas, trailing
+    junk, an unterminated tail)."""
+    import re
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", text.strip())   # kill trailing commas
+    try:
+        return json.loads(cleaned)
+    except ValueError:
+        pass
+    # last resort: take the largest prefix ending at a top-level closing brace
+    depth, end = 0, -1
+    for i, ch in enumerate(cleaned):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+    if end > 0:
+        try:
+            return json.loads(cleaned[:end])
+        except ValueError:
+            return None
+    return None
 
 
 def _post_with_retry(url: str, body: dict, *, verbose: bool) -> Optional[dict]:
