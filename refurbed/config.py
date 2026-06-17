@@ -140,5 +140,5 @@ TOP_PICKS = 8
 # value-score ranking and a plain email — the monitor never breaks because of AI.
 GEMINI_MODEL = "gemini-2.5-flash"   # best price/quality for this; swap freely
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
-GEMINI_TIMEOUT = 40
+GEMINI_TIMEOUT = 60         # 2.5-flash thinking can be slow; avoid false timeouts
 GEMINI_MAX_CANDIDATES = 40          # how many offers we hand the model to rank
